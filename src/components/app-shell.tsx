@@ -7,7 +7,6 @@ import { AddSheet } from "./add-sheet";
 const NAV = [
   { label: "원두 목록", href: "/" },
   { label: "어드민", href: "/admin" },
-  { label: "내보내기", href: "/export" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,7 @@
 // 어드민 경로 확인 — 미매핑 붙이기가 해시를 재계산하고 판정을 살려두는가.
 import {
   AliasScope,
+  Prisma,
   BrewMethod,
   Category,
   NoteHitValue,
@@ -183,7 +184,11 @@ async function main() {
           touched = true;
         }
       }
-      if (touched) await tx.product.update({ where: { id: p.id }, data: { attributes: a } });
+      if (touched)
+        await tx.product.update({
+          where: { id: p.id },
+          data: { attributes: a as Prisma.InputJsonValue },
+        });
     }
     await tx.lookupValue.delete({ where: { id: source.id } });
   });
