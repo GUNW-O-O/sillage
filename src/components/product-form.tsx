@@ -89,7 +89,7 @@ export function ProductForm({
       </button>
       {!detailOpen && (
         <p className="mt-2 text-[13px] text-muted">
-          나라 · 가공을 채우면 나중에 그룹별 비교에 나타난다.
+          나라 · 가공을 채우면 나중에 그룹별 비교에 나타난다. 아는 것만 채우면 된다.
         </p>
       )}
 

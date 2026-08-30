@@ -1,26 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ROAST_LEVELS, type CoffeeAttributes } from "@/lib/product-attributes";
 
 import { LookupPicker } from "./lookup-picker";
 
-// 상세를 한 번에 다 펼치지 않는다. 채울 것만 하나씩 꺼낸다 —
+// 상세를 한 번에 다 펼치지 않는다. **순서대로 하나씩 나온다** —
+// 채우면 다음 칸이 뜨고, 모르면 건너뛴다.
 // 로스터리마다 공개 수준이 천차만별이라 빈 칸이 대부분인 긴 폼이 되기 쉽다 (설계 4-3).
 type FieldKey =
   | "country"
-  | "region"
-  | "variety"
   | "process"
+  | "variety"
   | "roastLevel"
-  | "agtron"
+  | "region"
   | "farm"
   | "producer"
-  | "lot";
+  | "lot"
+  | "agtron";
 
 type FieldDef = { key: FieldKey; label: string; only?: "single" };
 
+// 순서가 곧 입력 순서다. 봉투에서 눈에 먼저 들어오는 것부터.
 const FIELDS: FieldDef[] = [
   { key: "country", label: "나라" },
   { key: "process", label: "가공" },
@@ -34,12 +36,47 @@ const FIELDS: FieldDef[] = [
 ];
 
 // 가향 · 디카페인은 꺼냈다가 다시 "예"를 누를 값이 아니다. 기본이 false 인 boolean 이라
-// 칩 하나를 켜고 끄는 것으로 끝난다 — 필드로 두면 2탭이 되고,
-// 첫 화면에 "아니오" 버튼 하나만 떠서 조작처럼 보이지도 않는다.
+// 칩 하나를 켜고 끄면 끝난다.
 const FLAGS = [
   { key: "infused", label: "가향" },
   { key: "decaf", label: "디카페인" },
 ] as const;
+
+function hasValue(key: FieldKey, a: CoffeeAttributes): boolean {
+  const blend = a.kind === "blend";
+  switch (key) {
+    case "country":
+      return blend ? (a.countryIds?.length ?? 0) > 0 : !!a.countryId;
+    case "process":
+      return blend ? (a.processIds?.length ?? 0) > 0 : !!a.processId;
+    case "variety":
+      return a.varietyIds.length > 0;
+    case "roastLevel":
+      return !!a.roastLevel;
+    case "agtron":
+      return typeof a.agtron === "number" && !Number.isNaN(a.agtron);
+    default:
+      return !!a[key as "region" | "farm" | "producer" | "lot"]?.trim();
+  }
+}
+
+function clearOf(key: FieldKey, a: CoffeeAttributes): Partial<CoffeeAttributes> {
+  const blend = a.kind === "blend";
+  switch (key) {
+    case "country":
+      return blend ? { countryIds: [] } : { countryId: undefined };
+    case "process":
+      return blend ? { processIds: [] } : { processId: undefined };
+    case "variety":
+      return { varietyIds: [] };
+    case "roastLevel":
+      return { roastLevel: undefined };
+    case "agtron":
+      return { agtron: undefined };
+    default:
+      return { [key]: "" } as Partial<CoffeeAttributes>;
+  }
+}
 
 export function ProductDetailFields({
   attrs,
@@ -48,38 +85,42 @@ export function ProductDetailFields({
   attrs: CoffeeAttributes;
   onChange: (next: CoffeeAttributes) => void;
 }) {
-  const [active, setActive] = useState<FieldKey[]>([]);
+  // 지금까지 꺼낸 칸 수. 채우면 하나씩 는다
+  const [revealed, setRevealed] = useState(1);
+  const [skipped, setSkipped] = useState<FieldKey[]>([]);
 
   const set = <K extends keyof CoffeeAttributes>(k: K, v: CoffeeAttributes[K]) =>
     onChange({ ...attrs, [k]: v });
 
-  const available = FIELDS.filter(
-    (f) => !active.includes(f.key) && (!f.only || f.only === attrs.kind),
-  );
-  const shown = FIELDS.filter(
-    (f) => active.includes(f.key) && (!f.only || f.only === attrs.kind),
+  // 구성이 바뀌면 해당 없는 칸이 목록에서 빠진다
+  const applicable = useMemo(
+    () => FIELDS.filter((f) => !f.only || f.only === attrs.kind),
+    [attrs.kind],
   );
 
-  const drop = (key: FieldKey) => {
-    setActive((a) => a.filter((k) => k !== key));
-    // 뺀 필드의 값도 같이 비운다. 화면에 없는데 저장되면 놀란다
-    const cleared: Partial<CoffeeAttributes> = {
-      country: attrs.kind === "single" ? { countryId: undefined } : { countryIds: [] },
-      region: { region: "" },
-      variety: { varietyIds: [] },
-      process: attrs.kind === "single" ? { processId: undefined } : { processIds: [] },
-      roastLevel: { roastLevel: undefined },
-      agtron: { agtron: undefined },
-      farm: { farm: "" },
-      producer: { producer: "" },
-      lot: { lot: "" },
-    }[key];
-    onChange({ ...attrs, ...cleared });
+  // 마지막으로 꺼낸 칸이 채워지면 다음 칸을 자동으로 연다
+  useEffect(() => {
+    const last = applicable[revealed - 1];
+    if (last && hasValue(last.key, attrs) && revealed < applicable.length) {
+      setRevealed((r) => r + 1);
+    }
+  }, [attrs, applicable, revealed]);
+
+  const shown = applicable.slice(0, revealed).filter((f) => !skipped.includes(f.key));
+  const skippedShown = applicable.filter((f) => skipped.includes(f.key));
+  const remaining = applicable.length - revealed;
+
+  const skip = (key: FieldKey) => {
+    setSkipped((s) => [...s, key]);
+    setRevealed((r) => Math.min(r + 1, applicable.length));
+    onChange({ ...attrs, ...clearOf(key, attrs) });
   };
+
+  const unskip = (key: FieldKey) => setSkipped((s) => s.filter((k) => k !== key));
 
   return (
     <div className="mt-4 space-y-6">
-      {/* 구성은 다른 필드의 목록을 바꾸므로 항상 위에 둔다 */}
+      {/* 구성은 이후 칸의 목록을 바꾸므로 항상 위에 둔다 */}
       <div>
         <div className="mb-2 text-[14px] font-medium text-muted">구성</div>
         <div className="flex gap-2">
@@ -107,15 +148,21 @@ export function ProductDetailFields({
             </span>
             <button
               type="button"
-              onClick={() => drop(f.key)}
+              onClick={() => skip(f.key)}
               className="flex h-11 items-center px-2 text-[13px] text-muted-soft"
             >
-              빼기
+              건너뛰기
             </button>
           </div>
           <FieldBody fieldKey={f.key} attrs={attrs} set={set} />
         </div>
       ))}
+
+      {remaining > 0 && (
+        <p className="text-[13px] text-muted">
+          채우면 다음 항목이 나온다. 모르면 건너뛴다. {remaining}개 남음
+        </p>
+      )}
 
       <div>
         <div className="mb-2 text-[14px] font-medium text-muted">표시</div>
@@ -126,9 +173,7 @@ export function ProductDetailFields({
               <button
                 key={f.key}
                 type="button"
-                onClick={() =>
-                  f.key === "infused" ? set("infused", !on) : set("decaf", !on)
-                }
+                onClick={() => (f.key === "infused" ? set("infused", !on) : set("decaf", !on))}
                 className={`inline-flex min-h-11 items-center rounded-full px-[14px] text-[14px] font-medium ${
                   on ? "bg-accent text-on-accent" : "border border-hairline text-body"
                 }`}
@@ -140,15 +185,16 @@ export function ProductDetailFields({
         </div>
       </div>
 
-      {available.length > 0 && (
+      {/* 잘못 건너뛴 것을 되돌릴 자리 */}
+      {skippedShown.length > 0 && (
         <div>
-          <div className="mb-2 text-[13px] text-muted">아는 것만 골라 채운다</div>
+          <div className="mb-2 text-[13px] text-muted">건너뛴 항목</div>
           <div className="flex flex-wrap gap-2">
-            {available.map((f) => (
+            {skippedShown.map((f) => (
               <button
                 key={f.key}
                 type="button"
-                onClick={() => setActive((a) => [...a, f.key])}
+                onClick={() => unskip(f.key)}
                 className="inline-flex min-h-11 items-center rounded-full border border-dashed border-hairline px-[14px] text-[14px] text-body"
               >
                 + {f.label}
