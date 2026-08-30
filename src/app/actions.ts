@@ -4,6 +4,7 @@ import {
   AliasScope,
   BrewMethod,
   Category,
+  LookupKind,
   LookupStatus,
   NoteHitValue,
   Phase,
@@ -473,4 +474,119 @@ export async function listFlavorTree() {
   return nodes
     .filter((n) => n.level === 1)
     .map((l1) => ({ ...l1, children: nodes.filter((n) => n.parentId === l1.id) }));
+}
+
+export async function adminStats() {
+  const [unmapped, mapped, pendingVendors, pendingLookups, products, vendors, records] =
+    await Promise.all([
+      prisma.sellerNote.count({ where: { nodeId: null } }),
+      prisma.sellerNote.count({ where: { nodeId: { not: null } } }),
+      prisma.vendor.count({ where: { status: VendorStatus.PENDING } }),
+      prisma.lookupValue.count({ where: { status: LookupStatus.PENDING } }),
+      prisma.product.count(),
+      prisma.vendor.count(),
+      prisma.experience.count(),
+    ]);
+  return { unmapped, mapped, pendingVendors, pendingLookups, products, vendors, records };
+}
+
+export type PendingVendor = { id: string; name: string; productCount: number };
+export type PendingLookup = { id: string; kind: LookupKind; nameKo: string };
+
+export async function listPending() {
+  const [vendors, lookups] = await Promise.all([
+    prisma.vendor.findMany({
+      where: { status: VendorStatus.PENDING },
+      select: { id: true, name: true, _count: { select: { products: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.lookupValue.findMany({
+      where: { status: LookupStatus.PENDING },
+      select: { id: true, kind: true, nameKo: true },
+      orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
+    }),
+  ]);
+  return {
+    vendors: vendors.map((v) => ({ id: v.id, name: v.name, productCount: v._count.products })),
+    lookups,
+  };
+}
+
+export async function approveVendor(id: string): Promise<AdminResult> {
+  await prisma.vendor.update({ where: { id }, data: { status: VendorStatus.APPROVED } });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function approveLookup(id: string): Promise<AdminResult> {
+  await prisma.lookupValue.update({ where: { id }, data: { status: LookupStatus.APPROVED } });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/// 병합의 실체는 삭제가 아니라 **흡수**다 (설계 4-8).
+/// 없어지는 쪽의 이름과 별칭이 남는 쪽의 aliases 로 들어가야
+/// 다음에 같은 표기가 들어와도 다시 갈라지지 않는다.
+export async function mergeLookup(sourceId: string, targetId: string): Promise<AdminResult> {
+  if (sourceId === targetId) return { ok: false, message: "같은 항목이다" };
+
+  return prisma
+    .$transaction(async (tx) => {
+      const [source, target] = await Promise.all([
+        tx.lookupValue.findUniqueOrThrow({ where: { id: sourceId } }),
+        tx.lookupValue.findUniqueOrThrow({ where: { id: targetId } }),
+      ]);
+      if (source.kind !== target.kind) throw new Error("종류가 다르다");
+
+      await tx.lookupValue.update({
+        where: { id: targetId },
+        data: {
+          aliases: [...new Set([...target.aliases, source.nameKo, ...source.aliases])],
+        },
+      });
+
+      // attributes JSONB 안의 id 에는 FK 를 걸 수 없다 (설계 4-3).
+      // 무결성은 여기서 진다 — 참조를 직접 훑어 갈아끼운다
+      const products = await tx.product.findMany({ select: { id: true, attributes: true } });
+      for (const p of products) {
+        const a = p.attributes as Record<string, unknown>;
+        let touched = false;
+        for (const key of ["countryId", "processId"]) {
+          if (a[key] === sourceId) {
+            a[key] = targetId;
+            touched = true;
+          }
+        }
+        for (const key of ["countryIds", "processIds", "varietyIds"]) {
+          const list = a[key];
+          if (Array.isArray(list) && list.includes(sourceId)) {
+            a[key] = [...new Set(list.map((v) => (v === sourceId ? targetId : v)))];
+            touched = true;
+          }
+        }
+        if (touched) {
+          await tx.product.update({
+            where: { id: p.id },
+            data: { attributes: a as Prisma.InputJsonValue },
+          });
+        }
+      }
+
+      await tx.lookupValue.delete({ where: { id: sourceId } });
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/admin");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+export async function listLookupsByKind(kind: LookupKind) {
+  return prisma.lookupValue.findMany({
+    where: { kind, status: LookupStatus.APPROVED },
+    select: { id: true, nameKo: true },
+    orderBy: [{ sortWeight: "desc" }, { nameKo: "asc" }],
+    take: 300,
+  });
 }

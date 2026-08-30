@@ -1,32 +1,66 @@
-import { listFlavorTree, listUnmappedNotes } from "@/app/actions";
-import { UnmappedQueue } from "@/components/unmapped-queue";
+import Link from "next/link";
 
-// 어드민은 PC 전용이다 (설계 7-4). 반응형 대상에서 빼면 표와 폼으로 끝난다.
-//
-// 접근 통제는 서버가 한다 — 공개 URL 이라 경로만 알면 요청이 들어온다.
-// 지금은 로그인이 없어(요구 FR-10, 배포 시점) 통제할 대상이 없다.
-// 세션이 붙는 순간 여기와 모든 어드민 액션에서 role = admin 을 확인해야 한다.
+import { adminStats } from "@/app/actions";
+
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
-  const [notes, tree] = await Promise.all([listUnmappedNotes(), listFlavorTree()]);
+function Stat({
+  label,
+  value,
+  hint,
+  href,
+  urgent,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  href?: string;
+  urgent?: boolean;
+}) {
+  const body = (
+    <div
+      className={`rounded-[10px] border p-4 ${
+        urgent ? "border-pending bg-surface-card" : "border-hairline bg-surface-raised"
+      }`}
+    >
+      <div className="text-[13px] text-muted">{label}</div>
+      <div className="tabular mt-1 text-[28px] leading-none text-ink">{value}</div>
+      <div className="mt-2 text-[12px] text-muted">{hint}</div>
+    </div>
+  );
+  return href ? <Link href={href}>{body}</Link> : body;
+}
+
+export default async function AdminOverview() {
+  const s = await adminStats();
+  const total = s.mapped + s.unmapped;
+  const rate = total === 0 ? 0 : Math.round((s.mapped / total) * 100);
 
   return (
-    <main className="mx-auto w-full max-w-[1000px] px-6 py-8">
-      <h1 className="font-serif text-[28px] text-ink">어드민</h1>
+    <main className="max-w-[1000px]">
+      <h1 className="font-serif text-[26px] text-ink">개요</h1>
       <p className="mt-2 text-[13px] text-muted">
-        등록 폼에서 노트 분류를 뺐으므로 미매핑 raw 가 여기 쌓인다. 처리하는 곳이 여기뿐이다.
+        등록 폼에서 노트 분류를 뺐으므로 미매핑 raw 가 여기 쌓인다. 처리하는 곳이 여기뿐이고,
+        비워두면 noteSetHash 가 unmapped 토큰으로 남아 동일성 키가 무의미해진다.
       </p>
 
-      <section className="mt-8">
-        <h2 className="text-[19px] font-semibold text-ink">
-          미매핑 노트 <span className="tabular text-muted">{notes.length}</span>
-        </h2>
-        <p className="mt-1 mb-4 text-[13px] text-muted">
-          붙이면 그 표현을 쓰는 모든 원두가 함께 붙고 noteSetHash 가 재계산된다.
-        </p>
-        <UnmappedQueue notes={notes} tree={tree} />
-      </section>
+      <div className="mt-6 grid grid-cols-3 gap-4">
+        <Stat
+          label="미매핑 노트"
+          value={String(s.unmapped)}
+          hint="붙이거나 지운다"
+          href="/admin/unmapped"
+          urgent={s.unmapped > 0}
+        />
+        <Stat
+          label="승인 대기"
+          value={String(s.pendingVendors + s.pendingLookups)}
+          hint={`로스터리 ${s.pendingVendors} · lookup ${s.pendingLookups}`}
+          href="/admin/pending"
+          urgent={s.pendingVendors + s.pendingLookups > 0}
+        />
+        <Stat label="노트 매핑률" value={`${rate}%`} hint={`${s.mapped} / ${total}`} />
+      </div>
     </main>
   );
 }

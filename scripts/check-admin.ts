@@ -134,6 +134,82 @@ async function main() {
   ok(recomputed !== hashBeforeDelete, "지우면 해시가 달라진다");
   ok(afterDelete.sellerNotes.length === 2, "향미가 아닌 표기가 사라진다");
 
+  // ── lookup 병합: attributes JSONB 안의 id 에는 FK 를 걸 수 없다 (설계 4-3).
+  // 무결성은 애플리케이션이 진다 — 참조가 실제로 갈아끼워지는지 확인한다
+  const dupName = `${TAG}무산소표기`;
+  const target = await prisma.lookupValue.findFirstOrThrow({
+    where: { kind: "PROCESS", nameKo: "무산소 발효" },
+    select: { id: true, aliases: true },
+  });
+  const source = await prisma.lookupValue.create({
+    data: {
+      kind: "PROCESS",
+      nameKo: dupName,
+      normalizedName: normalizeName(dupName),
+      status: "PENDING",
+    },
+    select: { id: true },
+  });
+  const withAttrs = await prisma.product.create({
+    data: {
+      vendorId: vendor.id,
+      category: Category.COFFEE,
+      name: `${TAG} 블렌드`,
+      normalizedName: normalizeName(`${TAG} 블렌드`),
+      noteSetHash: computeNoteSetHash([{ raw: "코코아", nodeId: "cocoa" }]),
+      attributes: { kind: "blend", processIds: [source.id], countryIds: ["x"] },
+      sellerNotes: { create: [{ raw: "코코아", nodeId: "cocoa", position: 0 }] },
+    },
+    select: { id: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    const [src, tgt] = await Promise.all([
+      tx.lookupValue.findUniqueOrThrow({ where: { id: source.id } }),
+      tx.lookupValue.findUniqueOrThrow({ where: { id: target.id } }),
+    ]);
+    await tx.lookupValue.update({
+      where: { id: target.id },
+      data: { aliases: [...new Set([...tgt.aliases, src.nameKo, ...src.aliases])] },
+    });
+    const all = await tx.product.findMany({ select: { id: true, attributes: true } });
+    for (const p of all) {
+      const a = p.attributes as Record<string, unknown>;
+      let touched = false;
+      for (const key of ["countryIds", "processIds", "varietyIds"]) {
+        const list = a[key];
+        if (Array.isArray(list) && list.includes(source.id)) {
+          a[key] = list.map((v) => (v === source.id ? target.id : v));
+          touched = true;
+        }
+      }
+      if (touched) await tx.product.update({ where: { id: p.id }, data: { attributes: a } });
+    }
+    await tx.lookupValue.delete({ where: { id: source.id } });
+  });
+
+  const merged = await prisma.product.findUniqueOrThrow({
+    where: { id: withAttrs.id },
+    select: { attributes: true },
+  });
+  const attrs = merged.attributes as { processIds?: string[] };
+  ok(attrs.processIds?.[0] === target.id, "병합이 JSONB 안의 lookup id 를 갈아끼운다");
+
+  const absorbed = await prisma.lookupValue.findUniqueOrThrow({
+    where: { id: target.id },
+    select: { aliases: true },
+  });
+  ok(absorbed.aliases.includes(dupName), "없어진 이름이 대상의 aliases 로 흡수된다");
+  ok(
+    (await prisma.lookupValue.count({ where: { id: source.id } })) === 0,
+    "병합 후 원본이 사라진다",
+  );
+
+  await prisma.lookupValue.update({
+    where: { id: target.id },
+    data: { aliases: absorbed.aliases.filter((a) => a !== dupName) },
+  });
+
   await cleanup();
   if (failed > 0) {
     console.error(`\n${failed}건 실패`);
