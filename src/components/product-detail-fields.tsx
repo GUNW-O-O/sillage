@@ -60,24 +60,6 @@ function hasValue(key: FieldKey, a: CoffeeAttributes): boolean {
   }
 }
 
-function clearOf(key: FieldKey, a: CoffeeAttributes): Partial<CoffeeAttributes> {
-  const blend = a.kind === "blend";
-  switch (key) {
-    case "country":
-      return blend ? { countryIds: [] } : { countryId: undefined };
-    case "process":
-      return blend ? { processIds: [] } : { processId: undefined };
-    case "variety":
-      return { varietyIds: [] };
-    case "roastLevel":
-      return { roastLevel: undefined };
-    case "agtron":
-      return { agtron: undefined };
-    default:
-      return { [key]: "" } as Partial<CoffeeAttributes>;
-  }
-}
-
 export function ProductDetailFields({
   attrs,
   onChange,
@@ -87,7 +69,6 @@ export function ProductDetailFields({
 }) {
   // 지금까지 꺼낸 칸 수. 채우면 하나씩 는다
   const [revealed, setRevealed] = useState(1);
-  const [skipped, setSkipped] = useState<FieldKey[]>([]);
 
   const set = <K extends keyof CoffeeAttributes>(k: K, v: CoffeeAttributes[K]) =>
     onChange({ ...attrs, [k]: v });
@@ -106,17 +87,11 @@ export function ProductDetailFields({
     }
   }, [attrs, applicable, revealed]);
 
-  const shown = applicable.slice(0, revealed).filter((f) => !skipped.includes(f.key));
-  const skippedShown = applicable.filter((f) => skipped.includes(f.key));
+  const shown = applicable.slice(0, revealed);
   const remaining = applicable.length - revealed;
 
-  const skip = (key: FieldKey) => {
-    setSkipped((s) => [...s, key]);
-    setRevealed((r) => Math.min(r + 1, applicable.length));
-    onChange({ ...attrs, ...clearOf(key, attrs) });
-  };
-
-  const unskip = (key: FieldKey) => setSkipped((s) => s.filter((k) => k !== key));
+  // 건너뛰면 그 칸은 공란으로 남고 다음 칸이 나온다. 나중에 채우고 싶으면 그냥 채운다
+  const skip = () => setRevealed((r) => Math.min(r + 1, applicable.length));
 
   return (
     <div className="mt-4 space-y-6">
@@ -148,7 +123,7 @@ export function ProductDetailFields({
             </span>
             <button
               type="button"
-              onClick={() => skip(f.key)}
+              onClick={skip}
               className="flex h-11 items-center px-2 text-[13px] text-muted-soft"
             >
               건너뛰기
@@ -185,24 +160,6 @@ export function ProductDetailFields({
         </div>
       </div>
 
-      {/* 잘못 건너뛴 것을 되돌릴 자리 */}
-      {skippedShown.length > 0 && (
-        <div>
-          <div className="mb-2 text-[13px] text-muted">건너뛴 항목</div>
-          <div className="flex flex-wrap gap-2">
-            {skippedShown.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => unskip(f.key)}
-                className="inline-flex min-h-11 items-center rounded-full border border-dashed border-hairline px-[14px] text-[14px] text-body"
-              >
-                + {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

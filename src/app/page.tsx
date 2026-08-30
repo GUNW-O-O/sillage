@@ -14,6 +14,7 @@ export default async function Home() {
       id: true,
       product: {
         select: {
+          id: true,
           name: true,
           vendor: { select: { name: true } },
           _count: { select: { sellerNotes: true } },
@@ -42,7 +43,7 @@ export default async function Home() {
           {records.map((r) => (
             <li key={r.id}>
               <a
-                href={`/records/${r.id}`}
+                href={`/products/${r.product.id}/record`}
                 className="flex min-h-14 flex-col justify-center border-b border-hairline-soft py-3"
               >
                 <span className="text-[17px] font-semibold text-ink">{r.product.name}</span>

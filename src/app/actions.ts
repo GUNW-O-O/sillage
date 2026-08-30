@@ -1,6 +1,15 @@
 "use server";
 
-import { Category, LookupStatus, Prisma, VendorStatus } from "@prisma/client";
+import {
+  BrewMethod,
+  Category,
+  LookupStatus,
+  NoteHitValue,
+  Phase,
+  Prisma,
+  VendorStatus,
+} from "@prisma/client";
+import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db";
 import { currentUserId } from "@/lib/current-user";
@@ -252,4 +261,66 @@ export async function createProduct(input: CreateProductInput): Promise<CreatePr
   }
 
   return { ok: true, productId: product.id };
+}
+
+export type NoteHitValueInput = "MISS" | "UNSURE" | "WEAK" | "STRONG";
+
+/// 기록 저장 (요구 FR-6).
+///
+/// Product 당 Experience 는 1개다 (설계 4-4). 같은 원두를 다시 골라도 새로 만들지 않고
+/// 기존 기록을 고친다. 그래서 라우트가 /products/[id]/record 하나다.
+///
+/// 저장에 제약을 두지 않는다 — 안 찍힌 노트가 "못 느껴서"인지 "귀찮아서"인지
+/// 시스템이 구분할 수 없고, 구분 못 하는 것으로 막을 수 없다.
+export async function saveRecord(
+  productId: string,
+  hits: { sellerNoteId: string; value: NoteHitValueInput }[],
+): Promise<{ ok: true }> {
+  const userId = currentUserId();
+
+  await prisma.$transaction(async (tx) => {
+    const experience = await tx.experience.upsert({
+      where: {
+        userId_productId_method_phase: {
+          userId,
+          productId,
+          method: BrewMethod.HAND_DRIP,
+          phase: Phase.OVERALL,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        productId,
+        method: BrewMethod.HAND_DRIP,
+        phase: Phase.OVERALL,
+      },
+      select: { id: true },
+    });
+
+    // 노트 항목 단위 행으로 저장한다. JSON blob 이면 나중에 노트가 추가·삭제될 때
+    // 부분 보존이 원리적으로 불가능해진다 (설계 4-4)
+    for (const hit of hits) {
+      await tx.noteHit.upsert({
+        where: {
+          experienceId_sellerNoteId: { experienceId: experience.id, sellerNoteId: hit.sellerNoteId },
+        },
+        update: { value: hit.value as NoteHitValue },
+        create: {
+          experienceId: experience.id,
+          sellerNoteId: hit.sellerNoteId,
+          value: hit.value as NoteHitValue,
+        },
+      });
+    }
+  });
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function deleteRecord(productId: string): Promise<{ ok: true }> {
+  await prisma.experience.deleteMany({ where: { userId: currentUserId(), productId } });
+  revalidatePath("/");
+  return { ok: true };
 }
