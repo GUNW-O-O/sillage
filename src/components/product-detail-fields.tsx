@@ -17,9 +17,7 @@ type FieldKey =
   | "agtron"
   | "farm"
   | "producer"
-  | "lot"
-  | "infused"
-  | "decaf";
+  | "lot";
 
 type FieldDef = { key: FieldKey; label: string; only?: "single" };
 
@@ -33,9 +31,15 @@ const FIELDS: FieldDef[] = [
   { key: "producer", label: "프로듀서", only: "single" },
   { key: "lot", label: "로트", only: "single" },
   { key: "agtron", label: "아그트론" },
+];
+
+// 가향 · 디카페인은 꺼냈다가 다시 "예"를 누를 값이 아니다. 기본이 false 인 boolean 이라
+// 칩 하나를 켜고 끄는 것으로 끝난다 — 필드로 두면 2탭이 되고,
+// 첫 화면에 "아니오" 버튼 하나만 떠서 조작처럼 보이지도 않는다.
+const FLAGS = [
   { key: "infused", label: "가향" },
   { key: "decaf", label: "디카페인" },
-];
+] as const;
 
 export function ProductDetailFields({
   attrs,
@@ -69,8 +73,6 @@ export function ProductDetailFields({
       farm: { farm: "" },
       producer: { producer: "" },
       lot: { lot: "" },
-      infused: { infused: false },
-      decaf: { decaf: false },
     }[key];
     onChange({ ...attrs, ...cleared });
   };
@@ -114,6 +116,29 @@ export function ProductDetailFields({
           <FieldBody fieldKey={f.key} attrs={attrs} set={set} />
         </div>
       ))}
+
+      <div>
+        <div className="mb-2 text-[14px] font-medium text-muted">표시</div>
+        <div className="flex flex-wrap gap-2">
+          {FLAGS.map((f) => {
+            const on = f.key === "infused" ? attrs.infused : !!attrs.decaf;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() =>
+                  f.key === "infused" ? set("infused", !on) : set("decaf", !on)
+                }
+                className={`inline-flex min-h-11 items-center rounded-full px-[14px] text-[14px] font-medium ${
+                  on ? "bg-accent text-on-accent" : "border border-hairline text-body"
+                }`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {available.length > 0 && (
         <div>
@@ -206,23 +231,6 @@ function FieldBody({
           onChange={(v) => set("agtron", v ? Number(v) : undefined)}
         />
       );
-    case "infused":
-    case "decaf": {
-      const on = fieldKey === "infused" ? attrs.infused : !!attrs.decaf;
-      return (
-        <button
-          type="button"
-          onClick={() =>
-            fieldKey === "infused" ? set("infused", !on) : set("decaf", !on)
-          }
-          className={`inline-flex min-h-11 items-center rounded-full px-[14px] text-[14px] font-medium ${
-            on ? "bg-accent text-on-accent" : "border border-hairline text-body"
-          }`}
-        >
-          {on ? "예" : "아니오"}
-        </button>
-      );
-    }
     default: {
       const k = fieldKey as "region" | "farm" | "producer" | "lot";
       return <Text value={attrs[k] ?? ""} onChange={(v) => set(k, v)} />;

@@ -97,6 +97,17 @@ async function main() {
     "저장된 해시가 언제든 재계산 가능하다",
   );
 
+  // 국가 목록은 커피 산지가 위로 온다. 249개를 가나다순으로 깔면 산지가 안 보인다
+  const countries = await prisma.lookupValue.findMany({
+    where: { kind: "COUNTRY" },
+    select: { nameKo: true },
+    orderBy: [{ sortWeight: "desc" }, { status: "asc" }, { nameKo: "asc" }],
+    take: 6,
+  });
+  const top = countries.map((c) => c.nameKo);
+  ok(top[0] === "에티오피아", `국가 목록 첫 줄이 산지다 (${top.join(" ")})`);
+  ok(!top.includes("가나"), "가나다순 상위가 밀려난다");
+
   await prisma.product.deleteMany({ where: { name: { startsWith: "[검증]" } } });
   if (failed > 0) {
     console.error(`\n${failed}건 실패`);
