@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  AliasScope,
   BrewMethod,
   Category,
   LookupStatus,
@@ -323,4 +324,153 @@ export async function deleteRecord(productId: string): Promise<{ ok: true }> {
   await prisma.experience.deleteMany({ where: { userId: currentUserId(), productId } });
   revalidatePath("/");
   return { ok: true };
+}
+
+// ─────────────────────────────────────────── 어드민 (요구 FR-9)
+
+/// noteSetHash 는 파생값이라 언제든 재계산 가능해야 한다 (설계 4-3).
+/// 미매핑 raw 를 붙이거나 지우면 여기서 다시 계산되고, 그 결과 다른 Product 과
+/// 키가 같아질 수 있다 — 그건 병합 대상이라 적용하지 않고 알린다 (설계 7-4).
+async function recomputeHash(
+  tx: Prisma.TransactionClient,
+  productId: string,
+): Promise<{ ok: true } | { ok: false; conflictWith: string; conflictName: string }> {
+  const product = await tx.product.findUniqueOrThrow({
+    where: { id: productId },
+    select: {
+      vendorId: true,
+      category: true,
+      normalizedName: true,
+      sellerNotes: { select: { raw: true, nodeId: true } },
+    },
+  });
+  const noteSetHash = computeNoteSetHash(product.sellerNotes);
+
+  const clash = await tx.product.findUnique({
+    where: {
+      vendorId_category_normalizedName_noteSetHash: {
+        vendorId: product.vendorId,
+        category: product.category,
+        normalizedName: product.normalizedName,
+        noteSetHash,
+      },
+    },
+    select: { id: true, name: true },
+  });
+  if (clash && clash.id !== productId) {
+    return { ok: false, conflictWith: clash.id, conflictName: clash.name };
+  }
+
+  await tx.product.update({ where: { id: productId }, data: { noteSetHash } });
+  return { ok: true };
+}
+
+export type UnmappedNote = {
+  id: string;
+  raw: string;
+  productId: string;
+  productName: string;
+  vendorName: string;
+  /// 같은 raw 가 몇 군데서 쓰였나. 붙일 가치를 판단하는 근거다
+  sameRawCount: number;
+};
+
+/// 미매핑 raw 큐 — 어드민의 주 작업 화면이다 (설계 7-4).
+/// 등록 폼에서 노트 분류를 뺐으므로 여기가 없으면 noteSetHash 가 전부
+/// unmapped 토큰으로 남아 동일성 키가 무의미해진다.
+export async function listUnmappedNotes(): Promise<UnmappedNote[]> {
+  const rows = await prisma.sellerNote.findMany({
+    where: { nodeId: null },
+    select: {
+      id: true,
+      raw: true,
+      productId: true,
+      product: { select: { name: true, vendor: { select: { name: true } } } },
+    },
+    orderBy: { addedAt: "asc" },
+    take: 200,
+  });
+
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.raw, (counts.get(r.raw) ?? 0) + 1);
+
+  return rows.map((r) => ({
+    id: r.id,
+    raw: r.raw,
+    productId: r.productId,
+    productName: r.product.name,
+    vendorName: r.product.vendor.name,
+    sameRawCount: counts.get(r.raw) ?? 1,
+  }));
+}
+
+export type AdminResult = { ok: true } | { ok: false; message: string };
+
+/// raw 를 노드에 붙인다. 같은 raw 를 쓰는 다른 미매핑 항목도 함께 붙는다 —
+/// 하나씩 보는 것보다 모아 보는 편이 판단이 정확하다는 것이 이 큐의 전제다.
+export async function attachNote(raw: string, nodeId: string): Promise<AdminResult> {
+  const normalizedRaw = normalizeName(raw);
+
+  return prisma.$transaction(async (tx) => {
+    // 어드민이 붙인 매핑은 공용이다.
+    // upsert 를 쓸 수 없다 — public 유일성은 부분 유니크 인덱스로 걸려 있고
+    // (createdById 가 NULL 이라 복합 unique 가 동작하지 않는다) Prisma 는 부분 인덱스를
+    // where 대상으로 잡지 못한다
+    const existing = await tx.noteAlias.findFirst({
+      where: { normalizedRaw, scope: AliasScope.PUBLIC },
+      select: { id: true },
+    });
+    if (existing) {
+      await tx.noteAlias.update({ where: { id: existing.id }, data: { nodeId } });
+    } else {
+      await tx.noteAlias.create({
+        data: { raw, normalizedRaw, nodeId, scope: AliasScope.PUBLIC },
+      });
+    }
+
+    const targets = await tx.sellerNote.findMany({
+      where: { nodeId: null, raw },
+      select: { id: true, productId: true },
+    });
+    await tx.sellerNote.updateMany({ where: { id: { in: targets.map((t) => t.id) } }, data: { nodeId } });
+
+    for (const productId of new Set(targets.map((t) => t.productId))) {
+      const r = await recomputeHash(tx, productId);
+      if (!r.ok) {
+        throw new Error(
+          `“${raw}” 를 붙이면 「${r.conflictName}」 과 같은 원두가 된다. 병합이 먼저다`,
+        );
+      }
+    }
+    return { ok: true as const };
+  }).catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 오타 · 향미가 아닌 표기는 지운다. 행을 그대로 지운다 — 지키지 않을 값을 위해
+/// 모든 해시 계산과 대조 쿼리에 제외 조건을 달고 다닐 이유가 없다 (설계 7-4).
+export async function deleteNote(sellerNoteId: string): Promise<AdminResult> {
+  return prisma.$transaction(async (tx) => {
+    const note = await tx.sellerNote.findUniqueOrThrow({
+      where: { id: sellerNoteId },
+      select: { productId: true },
+    });
+    const remaining = await tx.sellerNote.count({ where: { productId: note.productId } });
+    // 노트가 없으면 대조할 것이 없어 엔진 입력이 0이다 (설계 4-3)
+    if (remaining <= 1) throw new Error("마지막 노트는 지울 수 없다. 원두에 노트가 최소 1개 필요하다");
+
+    await tx.sellerNote.delete({ where: { id: sellerNoteId } });
+    const r = await recomputeHash(tx, note.productId);
+    if (!r.ok) throw new Error(`지우면 「${r.conflictName}」 과 같은 원두가 된다. 병합이 먼저다`);
+    return { ok: true as const };
+  }).catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+export async function listFlavorTree() {
+  const nodes = await prisma.flavorNode.findMany({
+    select: { id: true, level: true, parentId: true, labelKo: true },
+    orderBy: [{ level: "asc" }, { labelKo: "asc" }],
+  });
+  return nodes
+    .filter((n) => n.level === 1)
+    .map((l1) => ({ ...l1, children: nodes.filter((n) => n.parentId === l1.id) }));
 }

@@ -96,7 +96,10 @@ model NoteAlias {
   node      FlavorNode @relation(fields: [nodeId], references: [id])
   createdBy User?      @relation(fields: [createdById], references: [id])
 
-  /// 같은 표현을 한 사람이 두 번 등록하지 못하게. public 은 createdById = null 로 1개
+  /// 개인 별칭은 사람당 표현당 하나.
+  /// **public 에는 이 제약이 동작하지 않는다** — createdById 가 NULL 이고 Postgres 에서
+  /// NULL 끼리는 충돌하지 않기 때문이다. public 유일성은 부분 유니크 인덱스로 따로 건다
+  /// (migrations/..._note_alias_public_unique).
   @@unique([normalizedRaw, scope, createdById])
   @@index([nodeId])
 }
