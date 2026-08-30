@@ -590,3 +590,86 @@ export async function listLookupsByKind(kind: LookupKind) {
     take: 300,
   });
 }
+
+/// 승인하면서 별칭을 같이 받는다. 표기 흔들림을 흡수하는 경로가 aliases 뿐이라
+/// 승인 시점이 그걸 적어둘 유일한 자리다 (설계 4-2 · 4-8).
+export async function approveLookupWith(id: string, aliases: string[]): Promise<AdminResult> {
+  const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
+  await prisma.lookupValue.update({
+    where: { id },
+    data: { status: LookupStatus.APPROVED, ...(clean.length ? { aliases: clean } : {}) },
+  });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function approveVendorWith(id: string, aliases: string[]): Promise<AdminResult> {
+  const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
+  await prisma.vendor.update({
+    where: { id },
+    data: { status: VendorStatus.APPROVED, ...(clean.length ? { aliases: clean } : {}) },
+  });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/// 로스터리 병합. Product 동일성 키에 vendorId 가 들어가므로 아래 원두의 키가
+/// 전부 움직인다 — 이전 후 대상 아래에서 중복을 다시 검사해야 한다 (설계 7-4).
+export async function mergeVendor(sourceId: string, targetId: string): Promise<AdminResult> {
+  if (sourceId === targetId) return { ok: false, message: "같은 로스터리다" };
+
+  return prisma
+    .$transaction(async (tx) => {
+      const [source, target] = await Promise.all([
+        tx.vendor.findUniqueOrThrow({
+          where: { id: sourceId },
+          select: { name: true, aliases: true, products: { select: { id: true, category: true, normalizedName: true, noteSetHash: true } } },
+        }),
+        tx.vendor.findUniqueOrThrow({ where: { id: targetId }, select: { name: true, aliases: true } }),
+      ]);
+
+      // 이전하면 키가 충돌하는 원두가 있는지 먼저 본다. 있으면 Product 병합이 먼저다
+      for (const p of source.products) {
+        const clash = await tx.product.findUnique({
+          where: {
+            vendorId_category_normalizedName_noteSetHash: {
+              vendorId: targetId,
+              category: p.category,
+              normalizedName: p.normalizedName,
+              noteSetHash: p.noteSetHash,
+            },
+          },
+          select: { name: true },
+        });
+        if (clash) {
+          throw new Error(
+            `「${target.name}」 에 같은 원두(${clash.name})가 이미 있다. Product 병합이 먼저다`,
+          );
+        }
+      }
+
+      await tx.product.updateMany({ where: { vendorId: sourceId }, data: { vendorId: targetId } });
+      await tx.vendor.update({
+        where: { id: targetId },
+        data: { aliases: [...new Set([...target.aliases, source.name, ...source.aliases])] },
+      });
+      await tx.vendor.delete({ where: { id: sourceId } });
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/admin");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+export async function listApprovedVendors() {
+  const rows = await prisma.vendor.findMany({
+    where: { status: VendorStatus.APPROVED },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+    take: 300,
+  });
+  // 흡수 모달이 lookup 과 같은 모양을 쓰므로 키를 맞춘다
+  return rows.map((v) => ({ id: v.id, nameKo: v.name }));
+}

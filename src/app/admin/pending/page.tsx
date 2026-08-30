@@ -1,13 +1,14 @@
-import { listLookupsByKind, listPending } from "@/app/actions";
+import { listApprovedVendors, listLookupsByKind, listPending } from "@/app/actions";
 import { PendingQueue } from "@/components/pending-queue";
 
 export const dynamic = "force-dynamic";
 
 export default async function PendingPage() {
-  const [{ vendors, lookups }, varieties, processes] = await Promise.all([
+  const [{ vendors, lookups }, varieties, processes, approvedVendors] = await Promise.all([
     listPending(),
     listLookupsByKind("VARIETY"),
     listLookupsByKind("PROCESS"),
+    listApprovedVendors(),
   ]);
 
   return (
@@ -21,6 +22,7 @@ export default async function PendingPage() {
         vendors={vendors}
         lookups={lookups}
         options={{ VARIETY: varieties, PROCESS: processes }}
+        vendorOptions={approvedVendors}
       />
     </main>
   );

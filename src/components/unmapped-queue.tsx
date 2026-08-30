@@ -5,18 +5,18 @@ import { useMemo, useState, useTransition } from "react";
 
 import { attachNote, deleteNote, type UnmappedNote } from "@/app/actions";
 
+import { Modal } from "./modal";
+
 type Tree = { id: string; labelKo: string; children: { id: string; labelKo: string }[] }[];
 
 // 미매핑 raw 큐 — 어드민의 주 작업 화면이다 (설계 7-4).
-// raw 를 모아 보고 붙이거나 지운다. 하나씩 볼 때보다 판단이 정확하다는 것이 전제라
-// 같은 raw 는 한 줄로 묶어 보여준다.
+// 같은 raw 는 한 줄로 묶는다. 모아 보는 편이 판단이 정확하다는 것이 이 큐의 전제다.
 export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tree }) {
   const router = useRouter();
-  const [open, setOpen] = useState<string | null>(null);
+  const [target, setTarget] = useState<{ raw: string; items: UnmappedNote[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // 같은 표현은 한 줄로. 붙이면 전부 함께 붙는다
   const groups = useMemo(() => {
     const map = new Map<string, UnmappedNote[]>();
     for (const n of notes) {
@@ -33,7 +33,7 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
       const r = await fn();
       if (!r.ok) setError(r.message ?? "실패했다");
       else {
-        setOpen(null);
+        setTarget(null);
         router.refresh();
       }
     });
@@ -80,8 +80,8 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() => setOpen(open === raw ? null : raw)}
-                    className="inline-flex min-h-11 items-center rounded-[10px] bg-cta px-4 text-[14px] font-medium text-on-cta"
+                    onClick={() => setTarget({ raw, items })}
+                    className="inline-flex min-h-10 items-center rounded-[8px] bg-cta px-4 text-[14px] font-medium text-on-cta"
                   >
                     붙이기
                   </button>
@@ -98,39 +98,46 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
                         return { ok: true };
                       });
                     }}
-                    className="inline-flex min-h-11 items-center rounded-[10px] border border-hairline px-4 text-[14px] text-danger"
+                    className="inline-flex min-h-10 items-center rounded-[8px] border border-hairline px-4 text-[14px] text-danger"
                   >
                     지우기
                   </button>
                 </div>
-
-                {open === raw && (
-                  <div className="mt-3 rounded-[10px] border border-hairline bg-surface-card p-3">
-                    {tree.map((l1) => (
-                      <div key={l1.id} className="mb-3 last:mb-0">
-                        <div className="mb-1 text-[12px] text-muted">{l1.labelKo}</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {l1.children.map((l2) => (
-                            <button
-                              key={l2.id}
-                              type="button"
-                              disabled={pending}
-                              onClick={() => run(() => attachNote(raw, l2.id))}
-                              className="inline-flex min-h-9 items-center rounded-full border border-hairline bg-canvas px-3 text-[13px] text-body"
-                            >
-                              {l2.labelKo}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {target && (
+        <Modal
+          title="어느 축에 붙일까"
+          subject={target.raw}
+          onClose={() => setTarget(null)}
+        >
+          <p className="mb-4 text-[13px] text-muted">
+            이 표현을 쓰는 원두 {target.items.length}곳이 함께 붙는다. 집계는 Level 2 에서 한다.
+          </p>
+          {tree.map((l1) => (
+            <div key={l1.id} className="mb-4 last:mb-0">
+              <div className="mb-1.5 text-[12px] text-muted">{l1.labelKo}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {l1.children.map((l2) => (
+                  <button
+                    key={l2.id}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => run(() => attachNote(target.raw, l2.id))}
+                    className="inline-flex min-h-10 items-center rounded-full border border-hairline bg-surface-raised px-3.5 text-[14px] text-body"
+                  >
+                    {l2.labelKo}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </Modal>
+      )}
     </div>
   );
 }

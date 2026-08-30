@@ -162,7 +162,13 @@ export const VARIETIES: LookupSeed[] = [
   { nameKo: "파카스", nameEn: "Pacas" },
   { nameKo: "마라고지페", nameEn: "Maragogipe", aliases: ["마라고지페", "마라고지"] },
   { nameKo: "마라카투라", nameEn: "Maracaturra" },
-  { nameKo: "에티오피아 재래종", nameEn: "Ethiopian Heirloom", aliases: ["heirloom", "재래종", "에어룸"] },
+  // heirloom 은 "그 나라의 재래종"이지 에티오피아 전용이 아니다.
+  // 나라는 countryId 가 이미 받으므로 품종은 재래종 하나로 두고 표기를 alias 로 흡수한다
+  {
+    nameKo: "재래종",
+    nameEn: "Heirloom",
+    aliases: ["heirloom", "Heirloom", "에어룸", "에티오피아 재래종", "랜드레이스", "landrace", "잡종"],
+  },
   { nameKo: "74110", nameEn: "74110" },
   { nameKo: "74112", nameEn: "74112" },
   { nameKo: "74158", nameEn: "74158" },
