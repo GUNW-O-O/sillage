@@ -918,7 +918,15 @@ export type RecordDetail = {
   productName: string;
   vendorName: string;
   fields: { label: string; value: string }[];
-  notes: { id: string; raw: string; nodeId: string | null; value: NoteHitValueInput }[];
+  notes: {
+    id: string;
+    raw: string;
+    nodeId: string | null;
+    value: NoteHitValueInput;
+    /// 내가 기록한 뒤에 추가된 노트. 4-5 의 "안 건드림 = 못 느낌" 은 그 노트가 대조
+    /// 화면에 떠 있었다는 전제 위에 서는데, 나중에 추가된 것은 그 전제가 깨진다 (설계 7-4)
+    addedAfterRecord: boolean;
+  }[];
   createdAt: string;
   updatedAt: string;
 };
@@ -933,7 +941,10 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
       name: true,
       attributes: true,
       vendor: { select: { name: true } },
-      sellerNotes: { select: { id: true, raw: true, nodeId: true }, orderBy: { position: "asc" } },
+      sellerNotes: {
+        select: { id: true, raw: true, nodeId: true, addedAt: true },
+        orderBy: { position: "asc" },
+      },
       experiences: {
         where: { userId },
         select: {
@@ -965,8 +976,11 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
     vendorName: product.vendor.name,
     fields: describeProduct(product.attributes, new Map(lookups.map((l) => [l.id, l.nameKo]))),
     notes: product.sellerNotes.map((n) => ({
-      ...n,
+      id: n.id,
+      raw: n.raw,
+      nodeId: n.nodeId,
       value: (values.get(n.id) ?? "MISS") as NoteHitValueInput,
+      addedAfterRecord: !!exp && n.addedAt > exp.updatedAt,
     })),
     createdAt: (exp?.createdAt ?? new Date()).toISOString(),
     updatedAt: (exp?.updatedAt ?? new Date()).toISOString(),
@@ -1091,4 +1105,241 @@ export async function unmapAlias(aliasId: string): Promise<AdminResult> {
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+// ─────────────────────────────────────────── Product 수정 (누구나)
+//
+// Product 은 공유 자산이지만 수정을 막지 않는다. 읽는 쪽이 sellerNotes 를 기준으로
+// 렌더하고 noteHits 가 없으면 MISS 로 채우므로, 노트가 늘어도 기존 기록이 깨지지 않는다 —
+// 다음에 그 기록을 여는 순간 새 노트가 `못 느낌` 으로 나타난다.
+// 위험한 것은 삭제뿐이라 거기만 막는다.
+
+export async function addSellerNote(
+  productId: string,
+  raw: string,
+  nodeId: string | null,
+): Promise<AdminResult> {
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: false, message: "노트가 비어 있다" };
+
+  return prisma
+    .$transaction(async (tx) => {
+      const dup = await tx.sellerNote.findFirst({
+        where: { productId, raw: trimmed },
+        select: { id: true },
+      });
+      if (dup) throw new Error("이미 있는 노트다");
+
+      const last = await tx.sellerNote.findFirst({
+        where: { productId },
+        orderBy: { position: "desc" },
+        select: { position: true },
+      });
+      await tx.sellerNote.create({
+        data: { productId, raw: trimmed, nodeId, position: (last?.position ?? -1) + 1 },
+      });
+
+      const r = await recomputeHash(tx, productId);
+      if (!r.ok) throw new Error(`추가하면 「${r.conflictName}」 과 같은 원두가 된다`);
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 표기 수정은 소급이 아니다 — nodeId 가 그대로면 판정의 좌변이 안 바뀐다 (설계 7-4).
+/// 축까지 바꾸면 집계만 갈아타고 판정값은 유지된다.
+export async function updateSellerNote(
+  sellerNoteId: string,
+  raw: string,
+  nodeId: string | null,
+): Promise<AdminResult> {
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: false, message: "노트가 비어 있다" };
+
+  return prisma
+    .$transaction(async (tx) => {
+      const note = await tx.sellerNote.findUniqueOrThrow({
+        where: { id: sellerNoteId },
+        select: { productId: true },
+      });
+      await tx.sellerNote.update({
+        where: { id: sellerNoteId },
+        data: { raw: trimmed, nodeId },
+      });
+      const r = await recomputeHash(tx, note.productId);
+      if (!r.ok) throw new Error(`고치면 「${r.conflictName}」 과 같은 원두가 된다`);
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 판정이 붙은 노트는 지우지 않는다. 사용자가 실제로 찍은 판정은 사실이고,
+/// 판매자 노트가 잘못이었다는 것이 그 판정을 없앨 근거는 아니다 (설계 7-4).
+/// 표기가 틀린 것이면 수정으로 바꿔 쓴다.
+export async function deleteSellerNote(sellerNoteId: string): Promise<AdminResult> {
+  return prisma
+    .$transaction(async (tx) => {
+      const note = await tx.sellerNote.findUniqueOrThrow({
+        where: { id: sellerNoteId },
+        select: { productId: true, raw: true, _count: { select: { noteHits: true } } },
+      });
+      if (note._count.noteHits > 0) {
+        throw new Error(
+          `“${note.raw}” 에 판정 ${note._count.noteHits}건이 붙어 있다. 표기가 틀린 것이면 수정해서 쓴다`,
+        );
+      }
+      const remaining = await tx.sellerNote.count({ where: { productId: note.productId } });
+      if (remaining <= 1) throw new Error("마지막 노트는 지울 수 없다");
+
+      await tx.sellerNote.delete({ where: { id: sellerNoteId } });
+      const r = await recomputeHash(tx, note.productId);
+      if (!r.ok) throw new Error(`지우면 「${r.conflictName}」 과 같은 원두가 된다`);
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 제품명은 normalizedName 을 통해 동일성 키에 들어간다. 바꾸면 키가 움직인다.
+export async function updateProductName(productId: string, name: string): Promise<AdminResult> {
+  const trimmed = name.trim();
+  const normalizedName = normalizeName(trimmed);
+  if (!normalizedName) return { ok: false, message: "제품명이 비어 있다" };
+
+  const current = await prisma.product.findUniqueOrThrow({
+    where: { id: productId },
+    select: { vendorId: true, category: true, noteSetHash: true },
+  });
+  const clash = await prisma.product.findUnique({
+    where: {
+      vendorId_category_normalizedName_noteSetHash: {
+        vendorId: current.vendorId,
+        category: current.category,
+        normalizedName,
+        noteSetHash: current.noteSetHash,
+      },
+    },
+    select: { id: true, name: true },
+  });
+  if (clash && clash.id !== productId) {
+    return { ok: false, message: `「${clash.name}」 과 같은 원두가 된다` };
+  }
+
+  await prisma.product.update({
+    where: { id: productId },
+    data: { name: trimmed, normalizedName },
+  });
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function updateProductAttributes(
+  productId: string,
+  attributes: Record<string, unknown>,
+): Promise<AdminResult> {
+  await prisma.product.update({
+    where: { id: productId },
+    data: { attributes: attributes as Prisma.InputJsonValue },
+  });
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export type NoteDistribution = {
+  id: string;
+  raw: string;
+  nodeId: string | null;
+  nodeLabel: string | null;
+  /// 판정 분포. 표본 수를 항상 함께 보여준다 (설계 7-3)
+  counts: { STRONG: number; WEAK: number; UNSURE: number; MISS: number };
+  hitCount: number;
+  myValue: NoteHitValueInput | null;
+};
+
+export type ProductDetail = {
+  id: string;
+  name: string;
+  vendorName: string;
+  vendorId: string;
+  attributes: Record<string, unknown>;
+  fields: { label: string; value: string }[];
+  notes: NoteDistribution[];
+  /// 이 원두를 기록한 사람 수. 설계 전제 ① — 이 값은 오래도록 1에 머문다
+  sampleSize: number;
+  hasMyRecord: boolean;
+};
+
+export async function getProductDetail(productId: string): Promise<ProductDetail | null> {
+  const userId = currentUserId();
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true,
+      name: true,
+      attributes: true,
+      vendorId: true,
+      vendor: { select: { name: true } },
+      sellerNotes: {
+        select: {
+          id: true,
+          raw: true,
+          nodeId: true,
+          node: { select: { labelKo: true } },
+          noteHits: { select: { value: true, experience: { select: { userId: true } } } },
+        },
+        orderBy: { position: "asc" },
+      },
+      experiences: { select: { userId: true } },
+    },
+  });
+  if (!product) return null;
+
+  const ids = collectLookupIds(product.attributes);
+  const lookups = ids.length
+    ? await prisma.lookupValue.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, nameKo: true },
+      })
+    : [];
+
+  return {
+    id: product.id,
+    name: product.name,
+    vendorName: product.vendor.name,
+    vendorId: product.vendorId,
+    attributes: (product.attributes ?? {}) as Record<string, unknown>,
+    fields: describeProduct(product.attributes, new Map(lookups.map((l) => [l.id, l.nameKo]))),
+    sampleSize: product.experiences.length,
+    hasMyRecord: product.experiences.some((e) => e.userId === userId),
+    notes: product.sellerNotes.map((n) => {
+      const counts = { STRONG: 0, WEAK: 0, UNSURE: 0, MISS: 0 };
+      let mine: NoteHitValueInput | null = null;
+      for (const h of n.noteHits) {
+        counts[h.value] += 1;
+        if (h.experience.userId === userId) mine = h.value;
+      }
+      // 판정을 안 남긴 사람에게도 이 노트는 `못 느낌` 이다 (설계 4-5 · 6장)
+      counts.MISS += product.experiences.length - n.noteHits.length;
+      return {
+        id: n.id,
+        raw: n.raw,
+        nodeId: n.nodeId,
+        nodeLabel: n.node?.labelKo ?? null,
+        counts,
+        hitCount: counts.STRONG + counts.WEAK,
+        myValue: mine,
+      };
+    }),
+  };
 }

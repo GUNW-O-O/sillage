@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
@@ -203,6 +204,12 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
                             미분류
                           </span>
                         )}
+                        {/* 기록 당시 화면에 없던 노트. 한 번은 보게 만든다 (설계 7-4) */}
+                        {n.addedAfterRecord && (
+                          <span className="rounded-full border border-current px-1 text-[10px]">
+                            새로 추가됨
+                          </span>
+                        )}
                       </span>
                       <span className="mt-0.5 text-[12px] opacity-80">{s.label}</span>
                     </>
@@ -220,6 +227,14 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
                   );
                 })}
               </ul>
+
+              {/* 노트가 빠졌거나 정보가 틀린 것은 원두 쪽 문제다. 그쪽에서 고친다 */}
+              <Link
+                href={`/products/${detail.productId}`}
+                className="mt-6 flex min-h-12 w-full items-center justify-center rounded-[10px] border border-hairline text-[15px] text-body"
+              >
+                원두 정보 · 사람들이 느낀 것
+              </Link>
             </>
           )}
         </div>
