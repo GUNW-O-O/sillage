@@ -37,4 +37,5 @@ next-env.d.ts
 
 # etc
 .claude/
+.claude.local.md
 docs/
