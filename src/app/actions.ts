@@ -673,3 +673,134 @@ export async function listApprovedVendors() {
   // 흡수 모달이 lookup 과 같은 모양을 쓰므로 키를 맞춘다
   return rows.map((v) => ({ id: v.id, nameKo: v.name }));
 }
+
+/// FlavorNode 의 id 는 집계 축이라 한 번 정하면 못 바꾼다 — 바꾸면 데이터 마이그레이션이다.
+/// labelEn 에서 뽑되 영문·숫자·밑줄만 남긴다.
+function slugify(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/// Level 2 노드 추가 (설계 7-4).
+/// L1 아홉 개는 골격이라 건드리지 않는다. Level 3 도 시드하지 않는다 —
+/// 집계 레벨이 L2 라 L3 는 엔진에 쓰이지 않는다 (설계 4-6).
+export async function createFlavorNodeL2(
+  parentId: string,
+  labelKo: string,
+  labelEn: string,
+): Promise<AdminResult> {
+  const ko = labelKo.trim();
+  const en = labelEn.trim();
+  const id = slugify(en);
+  if (!ko || !en) return { ok: false, message: "한글 · 영문 라벨이 둘 다 필요하다" };
+  if (!id) return { ok: false, message: "영문 라벨에서 id 를 만들 수 없다" };
+
+  const parent = await prisma.flavorNode.findUnique({
+    where: { id: parentId },
+    select: { level: true },
+  });
+  if (!parent || parent.level !== 1) return { ok: false, message: "부모는 Level 1 이어야 한다" };
+  if (await prisma.flavorNode.findUnique({ where: { id }, select: { id: true } })) {
+    return { ok: false, message: `id "${id}" 가 이미 있다` };
+  }
+
+  await prisma.flavorNode.create({
+    data: { id, level: 2, parentId, labelKo: ko, labelEn: en },
+  });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/// 품종 · 가공을 어드민이 직접 추가한다. 인라인 추가와 달리 바로 승인 상태다.
+/// country 는 닫힌 집합이라 막는다 (설계 4-8).
+export async function createLookupApproved(
+  kind: "VARIETY" | "PROCESS",
+  nameKo: string,
+  nameEn: string,
+  aliases: string[],
+): Promise<AdminResult> {
+  const ko = nameKo.trim();
+  const normalizedName = normalizeName(ko);
+  if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
+
+  const dup = await prisma.lookupValue.findUnique({
+    where: { kind_normalizedName: { kind, normalizedName } },
+    select: { nameKo: true },
+  });
+  if (dup) return { ok: false, message: `「${dup.nameKo}」 와 같은 값이다` };
+
+  await prisma.lookupValue.create({
+    data: {
+      kind,
+      nameKo: ko,
+      nameEn: nameEn.trim() || null,
+      normalizedName,
+      aliases: [...new Set(aliases.map((a) => a.trim()).filter(Boolean))],
+      status: LookupStatus.APPROVED,
+      createdById: currentUserId(),
+    },
+  });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/// 로스터리를 어드민이 직접 추가한다. 바로 승인 상태다.
+export async function createVendorApproved(
+  name: string,
+  aliases: string[],
+): Promise<AdminResult> {
+  const trimmed = name.trim();
+  const normalizedName = normalizeName(trimmed);
+  if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
+
+  const dup = await prisma.vendor.findUnique({
+    where: { normalizedName },
+    select: { name: true },
+  });
+  if (dup) return { ok: false, message: `「${dup.name}」 와 같은 값이다` };
+
+  await prisma.vendor.create({
+    data: {
+      name: trimmed,
+      normalizedName,
+      aliases: [...new Set(aliases.map((a) => a.trim()).filter(Boolean))],
+      status: VendorStatus.APPROVED,
+      createdById: currentUserId(),
+    },
+  });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function listVendorsAdmin() {
+  const rows = await prisma.vendor.findMany({
+    select: {
+      id: true,
+      name: true,
+      aliases: true,
+      status: true,
+      _count: { select: { products: true } },
+    },
+    orderBy: [{ status: "asc" }, { name: "asc" }],
+    take: 300,
+  });
+  return rows.map((v) => ({
+    id: v.id,
+    name: v.name,
+    aliases: v.aliases,
+    status: v.status,
+    productCount: v._count.products,
+  }));
+}
+
+export async function listLookupsAdmin(kind: LookupKind) {
+  return prisma.lookupValue.findMany({
+    where: { kind },
+    select: { id: true, nameKo: true, nameEn: true, aliases: true, status: true },
+    orderBy: [{ sortWeight: "desc" }, { status: "asc" }, { nameKo: "asc" }],
+    take: 400,
+  });
+}

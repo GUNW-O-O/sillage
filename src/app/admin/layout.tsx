@@ -15,6 +15,8 @@ const NAV = [
   { href: "/admin/unmapped", label: "미매핑 노트", key: "unmapped" as const },
   { href: "/admin/pending", label: "승인 대기", key: "pending" as const },
   { href: "/admin/flavors", label: "향 계층", key: null },
+  { href: "/admin/lookups", label: "품종 · 가공", key: null },
+  { href: "/admin/vendors", label: "로스터리", key: null },
 ];
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
