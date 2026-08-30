@@ -147,7 +147,9 @@ function AttachModal({
 }) {
   const [mode, setMode] = useState<"attach" | "create">("attach");
   const [parentId, setParentId] = useState(tree[0]?.id ?? "");
-  const [labelKo, setKo] = useState(raw);
+  // raw 로 미리 채우지 않는다. raw 는 대개 L3 급 표현이라("그래니스미스") 그대로
+  // 축 이름이 되면 집계 해상도가 깨진다. 축은 그보다 넓은 이름이어야 한다
+  const [labelKo, setKo] = useState("");
   const [labelEn, setEn] = useState("");
 
   const slug = labelEn.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -168,7 +170,7 @@ function AttachModal({
               mode === m ? "bg-accent text-on-accent" : "border border-hairline text-body"
             }`}
           >
-            {m === "attach" ? "기존 축에 붙이기" : "새 축으로 만들기"}
+            {m === "attach" ? "기존 축에 붙이기" : "새 축 만들기"}
           </button>
         ))}
       </div>
@@ -194,9 +196,17 @@ function AttachModal({
         ))
       ) : (
         <div>
-          <p className="mb-3 text-[13px] text-muted">
-            기존 어느 축에도 안 들어갈 때만 쓴다. <strong className="text-ink">id 는 집계 축이라
-            나중에 못 바꾼다.</strong>
+          <p className="mb-2 text-[13px] text-muted">
+            기존 어느 축에도 안 들어갈 때만 쓴다. 집계는 Level 2 에서 하므로{" "}
+            <strong className="text-ink">축은 이 표현보다 넓은 이름</strong>이어야 한다 —
+            “그래니스미스”가 아니라 “사과”다.
+          </p>
+          <p className="mb-3 rounded-[10px] bg-surface-card px-3 py-2 text-[13px] text-body">
+            “{raw}” 는 새 축 <strong className="text-ink">{labelKo.trim() || "…"}</strong> 의
+            별칭이 된다. 이 표현 자체가 축이면 같은 이름을 써도 된다.
+          </p>
+          <p className="mb-3 text-[12px] text-muted">
+            <strong className="text-ink">id 는 집계 축이라 나중에 못 바꾼다.</strong>
           </p>
 
           <span className="mb-1.5 block text-[13px] text-muted">부모 (Level 1)</span>
@@ -218,19 +228,20 @@ function AttachModal({
           </div>
 
           <label className="mb-3 block">
-            <span className="mb-1.5 block text-[13px] text-muted">한글 라벨</span>
+            <span className="mb-1.5 block text-[13px] text-muted">축 이름 (한글)</span>
             <input
               value={labelKo}
               onChange={(e) => setKo(e.target.value)}
-              className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none"
+              placeholder="사과"
+              className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none placeholder:text-muted-soft"
             />
           </label>
           <label className="mb-3 block">
-            <span className="mb-1.5 block text-[13px] text-muted">영문 라벨 (id 의 근거)</span>
+            <span className="mb-1.5 block text-[13px] text-muted">축 이름 (영문 · id 의 근거)</span>
             <input
               value={labelEn}
               onChange={(e) => setEn(e.target.value)}
-              placeholder="Tropical Fruit"
+              placeholder="Apple"
               className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none placeholder:text-muted-soft"
             />
           </label>
@@ -246,7 +257,7 @@ function AttachModal({
             onClick={() => onCreate(parentId, labelKo, labelEn)}
             className="h-11 w-full rounded-[10px] bg-cta text-[15px] font-semibold text-on-cta disabled:bg-cta-disabled"
           >
-            만들고 붙이기
+            축 만들고 “{raw}” 붙이기
           </button>
         </div>
       )}

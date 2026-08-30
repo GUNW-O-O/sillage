@@ -193,6 +193,9 @@ function ProductStep({ vendor }: { vendor: VendorHit }) {
             <li key={p.id}>
               <button
                 type="button"
+                // 검색에서 고르는 것은 이미 명시적 선택이다. 확인을 또 묻지 않는다 (설계 7-2).
+                // 확인 화면은 등록 직후에만 둔다 (요구 FR-4)
+                onClick={() => router.push(`/products/${p.id}/record`)}
                 className="flex min-h-14 w-full items-center justify-between border-b border-hairline-soft py-3 text-left"
               >
                 <span>
