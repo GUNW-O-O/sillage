@@ -1,26 +1,125 @@
 @import "tailwindcss";
+/* Pretendard 동적 서브셋. 92조각을 unicode-range 로 나눠 두어 화면에 실제로 쓰인
+   글자가 든 조각만 받는다. 통짜 variable(2MB)을 받지 않기 위한 선택이다. */
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 
+/* DESIGN.md 의 토큰. 여기가 유일한 정의처이고 컴포넌트는 var() 로만 참조한다. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* 표면 — 따뜻한 크림.
+     canvas 는 바닥이지 표면이 아니다. 얹히는 것은 raised/card/sunken 셋뿐이다.
+     단차를 넓게 잡는다 — 좁으면 테두리 없이는 구분이 안 되고,
+     특히 sunken 을 쓰는 `모르겠음` 칩이 `못 느낌`(투명)과 뭉갠다 */
+  --canvas: #faf9f5;
+  --surface-raised: #f3eee3;
+  --surface-card: #eae1d2;
+  --surface-sunken: #ded3c0;
+  --hairline: #dcd3c4;
+  --hairline-soft: #e9e3d8;
+
+  /* 글자 */
+  --ink: #141413;
+  --body: #3d3d3a;
+  --muted: #6c6a64;
+  --muted-soft: #8e8b82;
+  --on-accent: #ffffff;
+
+  /* 강조 — 로스팅된 원두.
+     **판정 강도에만 쓴다.** CTA 를 잉크로 내린 이유가 이것이다 —
+     대조 화면에 `강함` 칩이 여럿 뜨는데 저장 버튼이 같은 색이면 신호가 경쟁한다 */
+  --accent: #9c4a2d;
+  --accent-pressed: #7a3722;
+  --accent-tint: #f2e0d5;
+  --accent-disabled: #ded5cb;
+
+  /* CTA — 다크 웜 브라운.
+     무채색 잉크(#1f1e1c)는 대비가 16:1 이라 웜/탠 팔레트에서 혼자 차갑게 튄다.
+     하단 저장 바가 폭 전체를 채우는 큰 블록이라 그 무게가 그대로 드러난다.
+     명도를 낮추고 색온도를 팔레트 안으로 들여온다. 판정 강조색과 계열이 달라
+     대조 화면에서 신호가 경쟁하지도 않는다 */
+  --cta: #453c31;
+  --cta-pressed: #2e281f;
+  --cta-disabled: #cfc7b9;
+  --on-cta: #faf9f5;
+
+  /* 판정 4상태 (설계 4-5). 색상이 아니라 채움 농도로 갈린다 */
+  --hit-strong-bg: var(--accent);
+  --hit-strong-fg: var(--on-accent);
+  --hit-weak-bg: var(--accent-tint);
+  --hit-weak-fg: var(--accent-pressed);
+  --unsure-bg: var(--surface-sunken);
+  --unsure-fg: var(--muted);
+  --miss-fg: var(--muted-soft);
+
+  /* 상태 */
+  --pending: #a8781f;
+  --danger: #a83a2e;
+  --success: #4f7f4a;
+
+  /* 터치 하한. 4상태 순환은 오탭 복구가 3탭이라 특히 지킨다 */
+  --touch-min: 44px;
+  --touch-row: 56px;
+  --touch-field: 48px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-card: var(--surface-card);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-hairline: var(--hairline);
+  --color-hairline-soft: var(--hairline-soft);
+
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-muted-soft: var(--muted-soft);
+
+  --color-accent: var(--accent);
+  --color-accent-pressed: var(--accent-pressed);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-disabled: var(--accent-disabled);
+  --color-on-accent: var(--on-accent);
+
+  --color-cta: var(--cta);
+  --color-cta-pressed: var(--cta-pressed);
+  --color-cta-disabled: var(--cta-disabled);
+  --color-on-cta: var(--on-cta);
+
+  --color-pending: var(--pending);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+
+  --font-sans: "Pretendard Variable", var(--font-serif-kr), sans-serif;
+  --font-serif: var(--font-serif-kr), serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* 100vh 는 주소창 때문에 어긋난다 */
+  height: 100dvh;
+  background: var(--canvas);
+  color: var(--body);
+  /* iOS 가 가로 모드에서 글자를 키우는 것을 막는다 */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  background: var(--canvas);
+  font-family: "Pretendard Variable", sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* 숫자는 자릿수가 흔들리면 목록에서 읽기 어렵다 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 하단 고정 요소가 홈 인디케이터에 가리지 않게 */
+.safe-bottom {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
 }
