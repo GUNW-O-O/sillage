@@ -7,12 +7,11 @@ import { createProduct, type NoteInput } from "@/app/actions";
 import {
   EMPTY_COFFEE_ATTRIBUTES,
   pruneAttributes,
-  ROAST_LEVELS,
   type CoffeeAttributes,
 } from "@/lib/product-attributes";
 
-import { LookupPicker } from "./lookup-picker";
 import { NoteChips } from "./note-input";
+import { ProductDetailFields } from "./product-detail-fields";
 
 type Duplicate = { productId: string; productName: string };
 
@@ -33,9 +32,6 @@ export function ProductForm({
   const [error, setError] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null);
   const [pending, startTransition] = useTransition();
-
-  const set = <K extends keyof CoffeeAttributes>(k: K, v: CoffeeAttributes[K]) =>
-    setAttrs((a) => ({ ...a, [k]: v }));
 
   // 필수 셋을 넘기면 바로 저장할 수 있다. 나머지는 전부 선택이다 (설계 7-1)
   const ready = name.trim().length > 0 && notes.length > 0;
@@ -97,118 +93,7 @@ export function ProductForm({
         </p>
       )}
 
-      {detailOpen && (
-        <div className="mt-4 space-y-6">
-          <Field label="구성">
-            <div className="flex gap-2">
-              {(["single", "blend"] as const).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => set("kind", k)}
-                  className={`inline-flex min-h-11 items-center rounded-full px-[14px] text-[14px] font-medium ${
-                    attrs.kind === k
-                      ? "bg-accent text-on-accent"
-                      : "border border-hairline text-body"
-                  }`}
-                >
-                  {k === "single" ? "싱글 오리진" : "블렌드"}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <LookupPicker
-            kind="COUNTRY"
-            label={attrs.kind === "single" ? "나라" : "나라 (복수)"}
-            multiple={attrs.kind === "blend"}
-            selected={
-              attrs.kind === "single"
-                ? attrs.countryId
-                  ? [attrs.countryId]
-                  : []
-                : (attrs.countryIds ?? [])
-            }
-            onChange={(ids) =>
-              attrs.kind === "single" ? set("countryId", ids[0]) : set("countryIds", ids)
-            }
-          />
-
-          {/* 블렌드는 지역 · 농장 · 프로듀서 · 로트를 아예 묻지 않는다 (설계 4-3) */}
-          {attrs.kind === "single" && (
-            <>
-              <Field label="지역">
-                <TextInput
-                  value={attrs.region ?? ""}
-                  onChange={(v) => set("region", v)}
-                  placeholder="예: 구지, 예가체페"
-                />
-              </Field>
-              <div className="grid gap-4">
-                <Field label="농장">
-                  <TextInput value={attrs.farm ?? ""} onChange={(v) => set("farm", v)} />
-                </Field>
-                <Field label="프로듀서">
-                  <TextInput value={attrs.producer ?? ""} onChange={(v) => set("producer", v)} />
-                </Field>
-                <Field label="로트">
-                  <TextInput value={attrs.lot ?? ""} onChange={(v) => set("lot", v)} />
-                </Field>
-              </div>
-            </>
-          )}
-
-          <LookupPicker
-            kind="VARIETY"
-            label="품종 (복수)"
-            multiple
-            selected={attrs.varietyIds}
-            onChange={(ids) => set("varietyIds", ids)}
-          />
-
-          <LookupPicker
-            kind="PROCESS"
-            label="가공방식"
-            selected={attrs.processId ? [attrs.processId] : []}
-            onChange={(ids) => set("processId", ids[0])}
-          />
-
-          <Field label="배전도">
-            <div className="flex flex-wrap gap-2">
-              {ROAST_LEVELS.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => set("roastLevel", attrs.roastLevel === r.value ? undefined : r.value)}
-                  className={`inline-flex min-h-11 items-center rounded-full px-[14px] text-[14px] font-medium ${
-                    attrs.roastLevel === r.value
-                      ? "bg-accent text-on-accent"
-                      : "border border-hairline text-body"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <Field label="아그트론">
-            <TextInput
-              value={attrs.agtron?.toString() ?? ""}
-              onChange={(v) => set("agtron", v ? Number(v) : undefined)}
-              placeholder="숫자"
-              inputMode="numeric"
-            />
-          </Field>
-
-          <div className="flex flex-wrap gap-2">
-            {/* 가향은 가공방식과 분리한다 — 추천이 걸러내야 한다 (설계 4-3) */}
-            <Toggle on={attrs.infused} onClick={() => set("infused", !attrs.infused)} label="가향" />
-            {/* 디카페인은 가공 축이 아니라 처리다. 워시드이면서 디카페인일 수 있다 */}
-            <Toggle on={!!attrs.decaf} onClick={() => set("decaf", !attrs.decaf)} label="디카페인" />
-          </div>
-        </div>
-      )}
+      {detailOpen && <ProductDetailFields attrs={attrs} onChange={setAttrs} />}
 
       {error && <p className="mt-4 text-[14px] text-danger">{error}</p>}
 
@@ -255,41 +140,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="mb-2 text-[14px] font-medium text-muted">{label}</div>
       {children}
     </div>
-  );
-}
-
-function TextInput({
-  value,
-  onChange,
-  placeholder,
-  inputMode,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  inputMode?: "numeric";
-}) {
-  return (
-    <input
-      value={value}
-      inputMode={inputMode}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="h-12 w-full rounded-[10px] bg-surface-sunken px-[14px] text-[16px] text-ink outline-none placeholder:text-muted-soft focus:ring-3 focus:ring-accent-tint"
-    />
-  );
-}
-
-function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex min-h-11 items-center rounded-full px-[14px] text-[14px] font-medium ${
-        on ? "bg-accent text-on-accent" : "border border-hairline text-body"
-      }`}
-    >
-      {label}
-    </button>
   );
 }

@@ -3,7 +3,14 @@ import { LookupKind, LookupStatus, PrismaClient, Role } from "@prisma/client";
 import "dotenv/config";
 
 import { normalizeName } from "../src/lib/normalize";
-import { COUNTRY_CODES, FLAVOR_NODES, PROCESSES, VARIETIES, type LookupSeed } from "./seed-data";
+import {
+  COFFEE_ORIGINS,
+  COUNTRY_CODES,
+  FLAVOR_NODES,
+  PROCESSES,
+  VARIETIES,
+  type LookupSeed,
+} from "./seed-data";
 
 const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DIRECT_URL 이 없다");
@@ -60,6 +67,11 @@ async function seedCountries() {
   const ko = new Intl.DisplayNames(["ko"], { type: "region" });
   const en = new Intl.DisplayNames(["en"], { type: "region" });
 
+  // 커피 산지를 목록 위로. 앞쪽일수록 가중치가 높다
+  const originRank = new Map<string, number>(
+    COFFEE_ORIGINS.map((code, i) => [code, COFFEE_ORIGINS.length - i]),
+  );
+
   for (const code of COUNTRY_CODES) {
     const nameKo = ko.of(code) ?? code;
     await prisma.lookupValue.upsert({
@@ -71,6 +83,7 @@ async function seedCountries() {
         nameKo,
         nameEn: en.of(code) ?? code,
         normalizedName: normalizeName(nameKo),
+        sortWeight: originRank.get(code) ?? 0,
         status: LookupStatus.APPROVED,
       },
     });

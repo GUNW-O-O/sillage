@@ -191,6 +191,17 @@ export const VARIETIES: LookupSeed[] = [
   { nameKo: "에우제니오이데스", nameEn: "Eugenioides" },
 ];
 
+/// 커피 생산국. 249개를 가나다순으로 깔면 가나 · 가봉부터 나와 산지가 안 보인다.
+/// 이 목록에 든 나라를 목록 위로 올린다 (LookupValue.sortWeight).
+/// 앞쪽일수록 가중치가 높다 — 국내에서 흔히 보는 산지 순이다.
+export const COFFEE_ORIGINS = [
+  "ET", "CO", "BR", "KE", "GT", "PA", "CR", "ID", "HN", "PE",
+  "NI", "SV", "RW", "BO", "EC", "MX", "TZ", "BI", "YE", "VN",
+  "IN", "PG", "JM", "DO", "CU", "HT", "UG", "ZM", "MW", "CD",
+  "CM", "CI", "GH", "TL", "TH", "PH", "MM", "LA", "CN", "TW",
+  "VE", "GY", "ZW", "MZ", "MG", "AO", "ST", "AU", "NP", "KH",
+] as const;
+
 /// ISO 3166-1 alpha-2. 닫힌 집합이라 인라인 추가를 막는다 (설계 4-8).
 /// 한글 · 영문 이름은 손으로 옮기지 않고 ICU(Intl.DisplayNames)에서 뽑는다 —
 /// 249개를 전사하면 오탈자가 확실히 난다.

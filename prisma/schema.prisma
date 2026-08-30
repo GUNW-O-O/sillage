@@ -124,6 +124,10 @@ model LookupValue {
   nameKo         String
   nameEn         String?
   normalizedName String
+  /// 목록 정렬 가중치. 큰 것이 먼저 온다.
+  /// country 249개를 가나다순으로 깔면 가나 · 가봉부터 나와 커피 산지가 안 보인다.
+  /// variety · process 도 자주 쓰는 것을 위로 올릴 자리다. 어드민이 조정한다
+  sortWeight     Int          @default(0)
   /// 표기 흔들림 흡수. 어드민 병합의 실체가 행 삭제가 아니라 흡수여야 한다 (4-8)
   /// 게이샤/게샤 · 무산소/애너로빅 · 공발효/코퍼멘테이션 · 펄프드내추럴→허니
   aliases        String[]     @default([])
@@ -135,6 +139,7 @@ model LookupValue {
 
   @@unique([kind, normalizedName])
   @@index([kind, status])
+  @@index([kind, sortWeight])
 }
 
 // ─────────────────────────────────────────── Vendor (4-2)

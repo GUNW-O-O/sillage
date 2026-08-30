@@ -130,6 +130,8 @@ export async function searchNoteSuggestions(query: string): Promise<NoteSuggesti
 
 export type LookupOption = { id: string; nameKo: string; status: LookupStatus };
 
+/// sortWeight 가 큰 것부터. 커피 산지를 목록 위로 올리는 자리다 (설계 4-8).
+
 export async function searchLookups(
   kind: "COUNTRY" | "VARIETY" | "PROCESS",
   query: string,
@@ -149,8 +151,8 @@ export async function searchLookups(
         : {}),
     },
     select: { id: true, nameKo: true, status: true },
-    orderBy: [{ status: "asc" }, { nameKo: "asc" }],
-    take: q ? 12 : 200,
+    orderBy: [{ sortWeight: "desc" }, { status: "asc" }, { nameKo: "asc" }],
+    take: q ? 12 : 60,
   });
 }
 

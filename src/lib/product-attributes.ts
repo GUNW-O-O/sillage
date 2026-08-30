@@ -15,7 +15,12 @@ export type RoastLevel = (typeof ROAST_LEVELS)[number]["value"];
 export type CoffeeAttributes = {
   kind: "single" | "blend";
   varietyIds: string[];
+  /// single 일 때. 하나다
   processId?: string;
+  /// blend 일 때. 구성 원두마다 가공이 다를 수 있다 — 워시드 + 내추럴 블렌드가 흔하다.
+  /// country 와 같은 처리다: lookup 이라 동일성 키가 있어 "무산소가 든 블렌드"로 집계된다.
+  /// 농장 · 프로듀서는 같은 처리를 못 한다 — 정규화할 키가 없어서다 (설계 4-1)
+  processIds?: string[];
   /// 가공방식과 분리한다 — 추천이 "가향으로 열대과일을 낸 원두"를 걸러내야 한다 (4-3)
   infused: boolean;
   roastLevel?: RoastLevel;
@@ -42,7 +47,11 @@ export const EMPTY_COFFEE_ATTRIBUTES: CoffeeAttributes = {
 export function pruneAttributes(a: CoffeeAttributes): Record<string, unknown> {
   const out: Record<string, unknown> = { kind: a.kind, infused: a.infused };
   if (a.varietyIds.length > 0) out.varietyIds = a.varietyIds;
-  if (a.processId) out.processId = a.processId;
+  if (a.kind === "single") {
+    if (a.processId) out.processId = a.processId;
+  } else if (a.processIds && a.processIds.length > 0) {
+    out.processIds = a.processIds;
+  }
   if (a.roastLevel) out.roastLevel = a.roastLevel;
   if (typeof a.agtron === "number" && !Number.isNaN(a.agtron)) out.agtron = a.agtron;
   if (a.decaf) out.decaf = true;
