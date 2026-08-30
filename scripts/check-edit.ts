@@ -135,6 +135,39 @@ async function main() {
     "제품명을 고쳐도 판정은 그대로다",
   );
 
+  // ── 목록에서 "새 노트"가 세어지는가. 기록을 열어봐야 아는 배지는
+  // 열 이유가 없으면 영영 안 보인다 — 목록에서 보여야 알아차린다
+  const row = await prisma.experience.findFirstOrThrow({
+    where: { userId: USER, productId: product.id },
+    select: {
+      updatedAt: true,
+      product: { select: { sellerNotes: { select: { addedAt: true, raw: true } } } },
+    },
+  });
+  const freshNotes = row.product.sellerNotes.filter((n) => n.addedAt > row.updatedAt);
+  ok(freshNotes.length === 1, `기록 이후 추가된 노트가 목록에서 세어진다 (${freshNotes.length}건)`);
+  ok(freshNotes[0]?.raw === "홍차", "세어진 것이 실제로 나중에 추가한 노트다");
+
+  // 다시 저장하면 확인한 것이 되어 표시가 사라진다
+  await prisma.experience.update({
+    where: { userId_productId_method_phase: {
+      userId: USER, productId: product.id,
+      method: BrewMethod.HAND_DRIP, phase: Phase.OVERALL,
+    } },
+    data: { updatedAt: new Date() },
+  });
+  const after2 = await prisma.experience.findFirstOrThrow({
+    where: { userId: USER, productId: product.id },
+    select: {
+      updatedAt: true,
+      product: { select: { sellerNotes: { select: { addedAt: true } } } },
+    },
+  });
+  ok(
+    after2.product.sellerNotes.filter((n) => n.addedAt > after2.updatedAt).length === 0,
+    "다시 저장하면 표시가 사라진다",
+  );
+
   await cleanup();
   if (failed > 0) {
     console.error(`\n${failed}건 실패`);

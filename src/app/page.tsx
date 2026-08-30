@@ -13,13 +13,15 @@ export default async function Home() {
     where: { userId },
     select: {
       id: true,
+      updatedAt: true,
       noteHits: { select: { value: true } },
       product: {
         select: {
           id: true,
           name: true,
           vendor: { select: { name: true } },
-          _count: { select: { sellerNotes: true } },
+          // 기록한 뒤에 추가된 노트를 목록에서 세려면 addedAt 이 필요하다
+          sellerNotes: { select: { addedAt: true } },
         },
       },
     },
@@ -31,9 +33,12 @@ export default async function Home() {
     productId: r.product.id,
     productName: r.product.name,
     vendorName: r.product.vendor.name,
-    noteCount: r.product._count.sellerNotes,
+    noteCount: r.product.sellerNotes.length,
     // 느낀 것(HIT)이 몇 개였나. 목록에서 바로 보이는 것이 이 도구의 요점이다
     hitCount: r.noteHits.filter((h) => h.value === "WEAK" || h.value === "STRONG").length,
+    // 내가 기록한 뒤에 누군가 추가한 노트. 목록에서 보여야 알아차린다 —
+    // 기록을 열어봐야 아는 배지는 열 이유가 없으면 영영 안 보인다
+    freshCount: r.product.sellerNotes.filter((n) => n.addedAt > r.updatedAt).length,
   }));
 
   return (

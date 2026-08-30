@@ -11,6 +11,7 @@ export type RecordRow = {
   vendorName: string;
   noteCount: number;
   hitCount: number;
+  freshCount: number;
 };
 
 // 목록에서 기록을 여는 것은 "보러" 여는 것이라 라우트로 나가지 않는다.
@@ -35,10 +36,19 @@ export function RecordList({ records }: { records: RecordRow[] }) {
                 </span>
                 <span className="mt-0.5 block text-[13px] text-muted">{r.vendorName}</span>
               </span>
-              <span className="tabular shrink-0 text-[13px] text-muted">
-                <span className="text-accent">{r.hitCount}</span>
-                {" / "}
-                {r.noteCount}
+              <span className="flex shrink-0 items-center gap-2">
+                {/* 기록 이후 추가된 노트. 강조색을 안 쓰는 이유는 그것이 판정 강도를
+                    뜻하기 때문이다 — 여기는 "손이 필요하다"는 뜻이라 pending 을 쓴다 */}
+                {r.freshCount > 0 && (
+                  <span className="tabular rounded-full bg-pending px-2 py-0.5 text-[11px] font-medium text-on-accent">
+                    새 노트 {r.freshCount}
+                  </span>
+                )}
+                <span className="tabular text-[13px] text-muted">
+                  <span className="text-accent">{r.hitCount}</span>
+                  {" / "}
+                  {r.noteCount}
+                </span>
               </span>
             </button>
           </li>
