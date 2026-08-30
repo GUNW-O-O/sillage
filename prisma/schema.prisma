@@ -1,0 +1,318 @@
+// 실라주 v0.1 스키마
+// 설계 4장 · 요구명세 FR-1~9 대응.
+// 원칙: 스키마는 v1 형태 그대로 둔다. v0.1 에 값이 없어도 컬럼은 지금 넣는다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 연결 문자열은 prisma.config.ts 에 있다 (Prisma 7 부터 schema 에서 제거됨).
+// 런타임 연결은 @prisma/adapter-pg 어댑터가 DATABASE_URL 로 맺는다.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────── 계정 (4-9)
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id          String   @id @default(cuid())
+  displayName String
+  role        Role     @default(USER)
+  /// v1 에서 Google OAuth 를 붙일 자리. 지금 넣는 비용이 0 이다 (4-9)
+  provider       String?
+  providerUserId String?
+  createdAt      DateTime @default(now())
+
+  invitedByCode   InviteCode?   @relation("InviteRedemption")
+  issuedCodes     InviteCode[]  @relation("InviteIssuer")
+  experiences     Experience[]
+  createdVendors  Vendor[]
+  createdProducts Product[]
+  createdAliases  NoteAlias[]
+  createdLookups  LookupValue[]
+
+  @@unique([provider, providerUserId])
+}
+
+model InviteCode {
+  id String @id @default(cuid())
+  /// 6자리 숫자의 해시. 평문 저장 금지 (4-9)
+  codeHash     String   @unique
+  createdById  String
+  usedByUserId String?  @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  createdBy User  @relation("InviteIssuer", fields: [createdById], references: [id])
+  usedBy    User? @relation("InviteRedemption", fields: [usedByUserId], references: [id])
+
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────── 향 계층 (4-6 · 4-7)
+
+model FlavorNode {
+  /// slug 를 그대로 pk 로 쓴다. 집계 축이라 안정적인 식별자가 필요하다
+  id       String  @id
+  level    Int
+  parentId String?
+  labelKo  String
+  labelEn  String
+
+  parent   FlavorNode?  @relation("NodeTree", fields: [parentId], references: [id])
+  children FlavorNode[] @relation("NodeTree")
+
+  aliases     NoteAlias[]
+  sellerNotes SellerNote[]
+  extraNotes  ExtraNote[]
+
+  @@index([level])
+  @@index([parentId])
+}
+
+enum AliasScope {
+  PERSONAL
+  PUBLIC
+}
+
+model NoteAlias {
+  id String @id @default(cuid())
+  /// 표시용 원문
+  raw String
+  /// 정규화 값. unique 대상이라 별도 컬럼에 저장한다 (8장 「Prisma 로 안 되는 것」)
+  normalizedRaw String
+  nodeId        String
+  scope         AliasScope @default(PERSONAL)
+  createdById   String?
+  /// 서로 다른 유저 수. 승격 판단용 (5장)
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  node      FlavorNode @relation(fields: [nodeId], references: [id])
+  createdBy User?      @relation(fields: [createdById], references: [id])
+
+  /// 같은 표현을 한 사람이 두 번 등록하지 못하게. public 은 createdById = null 로 1개
+  @@unique([normalizedRaw, scope, createdById])
+  @@index([nodeId])
+}
+
+// ─────────────────────────────────────────── lookup (4-8)
+
+enum LookupKind {
+  COUNTRY
+  VARIETY
+  PROCESS
+}
+
+enum LookupStatus {
+  PENDING
+  APPROVED
+}
+
+/// country · variety · process 를 한 테이블로. 형태가 같고 화면도 같다.
+/// country 만 닫힌 집합이라 인라인 추가를 코드에서 막는다 (4-8)
+model LookupValue {
+  id   String     @id @default(cuid())
+  kind LookupKind
+  /// ISO 코드 등. country 외에는 null
+  code           String?
+  nameKo         String
+  nameEn         String?
+  normalizedName String
+  /// 표기 흔들림 흡수. 어드민 병합의 실체가 행 삭제가 아니라 흡수여야 한다 (4-8)
+  /// 게이샤/게샤 · 무산소/애너로빅 · 공발효/코퍼멘테이션 · 펄프드내추럴→허니
+  aliases        String[]     @default([])
+  status         LookupStatus @default(PENDING)
+  createdById    String?
+  createdAt      DateTime     @default(now())
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@unique([kind, normalizedName])
+  @@index([kind, status])
+}
+
+// ─────────────────────────────────────────── Vendor (4-2)
+
+enum VendorRole {
+  ROASTER
+  IMPORTER
+  CAFE
+}
+
+enum VendorStatus {
+  PENDING
+  APPROVED
+}
+
+model Vendor {
+  id   String @id @default(cuid())
+  name String
+  /// unique 대상 (8장)
+  normalizedName String @unique
+  /// 표기 흔들림 흡수 (4-2)
+  aliases     String[]     @default([])
+  roles       VendorRole[] @default([])
+  website     String?
+  region      String?
+  status      VendorStatus @default(PENDING)
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  createdBy User?     @relation(fields: [createdById], references: [id])
+  products  Product[]
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────── Product (4-3)
+
+enum Category {
+  COFFEE
+  PERFUME
+  WINE
+  WHISKY
+  DIFFUSER
+}
+
+model Product {
+  id       String   @id @default(cuid())
+  vendorId String
+  category Category @default(COFFEE)
+  name     String
+  /// name 을 표기 사전으로 정규화한 값. unique 대상이라 별도 컬럼 (8장)
+  normalizedName String
+  /// sellerNotes 의 nodeId 집합 해시. 파생 · 저장 · 재계산 가능 (4-3)
+  /// 매핑 실패 항목은 unmapped:{정규화한 raw} 토큰으로 집합에 참여한다
+  noteSetHash String
+  /// 카테고리별 특화 필드. 스키마는 코드에 정의 (4-3)
+  /// coffee: kind · varietyIds[] · processId · infused · roastLevel · agtron
+  ///         countryId · region · farm · producer · lot · countryIds[]
+  /// 주의: 안의 lookup id 에 FK 를 걸 수 없다. 무결성은 애플리케이션이 진다
+  attributes  Json     @default("{}")
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vendor      Vendor       @relation(fields: [vendorId], references: [id])
+  createdBy   User?        @relation(fields: [createdById], references: [id])
+  sellerNotes SellerNote[]
+  experiences Experience[]
+
+  /// 동일성 키 (4-3)
+  @@unique([vendorId, category, normalizedName, noteSetHash])
+  @@index([vendorId])
+}
+
+/// 판매자 노트. 항목 단위 행으로 저장한다 — 배열/JSON 이면 noteHits 가 참조할 수 없다
+model SellerNote {
+  id        String @id @default(cuid())
+  productId String
+  /// 원문. 매핑에 실패해도 폐기하지 않는다 (5장)
+  raw String
+  /// 매핑 실패 시 null. noteSetHash 는 unmapped 토큰으로 받는다
+  nodeId String?
+  /// 화면 표시 순서
+  position Int
+  /// 이 노트가 Product 에 추가된 시각. 기록 이후 추가분 판정에 쓴다 (7-4)
+  addedAt DateTime @default(now())
+
+  product  Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  node     FlavorNode? @relation(fields: [nodeId], references: [id])
+  noteHits NoteHit[]
+
+  @@unique([productId, position])
+  @@index([nodeId])
+}
+
+// ─────────────────────────────────────────── Experience (4-4 · 4-5)
+
+enum BrewMethod {
+  HAND_DRIP
+  ESPRESSO
+  COLD_BREW
+}
+
+enum Phase {
+  /// v1 값. 단계를 나누지 않은 통합 인상
+  OVERALL
+  NOSE
+  PALATE
+  FINISH
+  TOP
+  MIDDLE
+  BASE
+}
+
+model Experience {
+  id String @id @default(cuid())
+  /// 동일성 키에 반드시 포함. 혼자 써도 넣는다 (9장 「나중에 못 고치는 것」)
+  userId    String
+  productId String
+  method    BrewMethod @default(HAND_DRIP)
+  phase     Phase      @default(OVERALL)
+  place     String?
+  /// coffee: myRoastLevel 등
+  attributes Json @default("{}")
+  /// v0.1 은 입력 UI 없음
+  memo String?
+  /// 처음 경험한 날
+  createdAt DateTime @default(now())
+  /// 마지막으로 경험한 날 (drankAt 을 따로 두지 않는 이유 · 4-4)
+  updatedAt DateTime @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product    Product     @relation(fields: [productId], references: [id])
+  noteHits   NoteHit[]
+  extraNotes ExtraNote[]
+
+  /// 동일성 키 (4-4)
+  @@unique([userId, productId, method, phase])
+  @@index([productId])
+}
+
+enum NoteHitValue {
+  /// 안 났다. 초기값. 안 건드린 것이 곧 이 값이다 (4-5)
+  MISS
+  /// 이게 그 맛인지 모르겠다. 적중률 분모에서 제외 · 경계율 지표
+  UNSURE
+  /// 느꼈다 (강도 1)
+  WEAK
+  /// 느꼈다 (강도 2)
+  STRONG
+}
+
+/// 노트 항목 단위 행. JSON blob 금지 — 소급 부분 보존이 원리적으로 불가능해진다 (4-4)
+model NoteHit {
+  id           String       @id @default(cuid())
+  experienceId String
+  sellerNoteId String
+  value        NoteHitValue @default(MISS)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  experience Experience @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  sellerNote SellerNote @relation(fields: [sellerNoteId], references: [id], onDelete: Cascade)
+
+  @@unique([experienceId, sellerNoteId])
+}
+
+/// 내가 추가로 느낀 노트. v0.1 은 입력 UI 없음 — 엔진(3차)이 쓰는 값이다
+model ExtraNote {
+  id           String   @id @default(cuid())
+  experienceId String
+  raw          String
+  nodeId       String?
+  createdAt    DateTime @default(now())
+
+  experience Experience  @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  node       FlavorNode? @relation(fields: [nodeId], references: [id])
+
+  @@index([experienceId])
+}

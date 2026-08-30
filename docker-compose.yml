@@ -1,0 +1,25 @@
+# 로컬 개발용 Postgres. 배포는 Supabase(ap-northeast-2).
+# 이미지 태그는 Supabase 가 돌리는 메이저 버전에 고정한다 — 설계 8장.
+services:
+  db:
+    image: postgres:17
+    container_name: sillage-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sillage
+      POSTGRES_PASSWORD: sillage_local
+      POSTGRES_DB: sillage
+      # 한글 정렬·검색 안정성. Supabase 기본과 맞춘다
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - sillage-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sillage -d sillage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sillage-pgdata:
