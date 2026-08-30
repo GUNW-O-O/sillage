@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import { deleteRecord, saveRecord, type NoteHitValueInput } from "@/app/actions";
 
@@ -45,6 +45,14 @@ export function NoteCycle({
       return { ...v, [id]: next };
     });
 
+  // "몇 개 찍었나"를 진행률로 보여주지 않는다 — 안 건드린 것이 곧 `못 느낌` 이라
+  // 미입력이 아니다. 대신 지금 판정이 어떻게 갈렸는지를 그대로 보여준다
+  const summary = useMemo(() => {
+    const counts = { STRONG: 0, WEAK: 0, UNSURE: 0, MISS: 0 };
+    for (const n of notes) counts[values[n.id]] += 1;
+    return counts;
+  }, [notes, values]);
+
   const save = () =>
     startTransition(async () => {
       await saveRecord(
@@ -56,13 +64,21 @@ export function NoteCycle({
 
   const remove = () =>
     startTransition(async () => {
+      if (!confirm("이 기록을 지운다. 판정이 함께 사라진다.")) return;
       await deleteRecord(productId);
       router.push("/");
     });
 
   return (
-    <div className="pb-32">
-      <p className="text-[13px] text-muted">
+    <div className="pb-40">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-[15px] font-semibold text-ink">판매자 노트 {notes.length}개</h2>
+        <span className="tabular text-[12px] text-muted">
+          강함 {summary.STRONG} · 약함 {summary.WEAK} · 모르겠음 {summary.UNSURE} · 못 느낌{" "}
+          {summary.MISS}
+        </span>
+      </div>
+      <p className="mt-1 text-[13px] text-muted">
         느낀 것만 탭한다. 안 건드린 노트는 <span className="text-ink">못 느낌</span> 이다.
       </p>
 
@@ -74,11 +90,19 @@ export function NoteCycle({
               <button
                 type="button"
                 onClick={() => cycle(n.id)}
-                className={`inline-flex min-h-11 flex-col items-start justify-center rounded-[14px] px-[14px] py-2 text-left ${s.cls}`}
+                className={`inline-flex min-h-14 min-w-[92px] flex-col items-start justify-center rounded-[14px] px-4 py-2 text-left ${s.cls}`}
               >
-                <span className="text-[15px] font-medium">{n.raw}</span>
+                <span className="flex items-center gap-1.5 text-[16px] font-medium">
+                  {n.raw}
+                  {/* 아직 축이 안 붙은 노트. 판정은 되지만 집계에는 안 들어간다 */}
+                  {!n.nodeId && (
+                    <span className="rounded-full border border-current px-1 text-[10px] opacity-60">
+                      미분류
+                    </span>
+                  )}
+                </span>
                 {/* 색만으로 상태를 표현하지 않는다 */}
-                <span className="text-[11px] opacity-80">{s.label}</span>
+                <span className="mt-0.5 text-[12px] opacity-80">{s.label}</span>
               </button>
             </li>
           );
@@ -93,14 +117,14 @@ export function NoteCycle({
             onClick={save}
             className="h-12 w-full rounded-[10px] bg-cta text-[16px] font-semibold text-on-cta active:bg-cta-pressed disabled:bg-cta-disabled"
           >
-            {pending ? "저장 중" : "저장"}
+            {pending ? "저장 중" : hasRecord ? "기록 고치기" : "기록 저장"}
           </button>
           {hasRecord && (
             <button
               type="button"
               disabled={pending}
               onClick={remove}
-              className="mt-2 h-12 w-full text-[15px] text-danger"
+              className="mt-1 h-11 w-full text-[14px] text-danger"
             >
               기록 삭제
             </button>
