@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { attachNote, deleteNote, type UnmappedNote } from "@/app/actions";
+import { attachNote, createNodeAndAttach, deleteNote, type UnmappedNote } from "@/app/actions";
 
 import { Modal } from "./modal";
 
@@ -110,34 +110,146 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
       </table>
 
       {target && (
-        <Modal
-          title="어느 축에 붙일까"
-          subject={target.raw}
+        <AttachModal
+          raw={target.raw}
+          count={target.items.length}
+          tree={tree}
+          pending={pending}
           onClose={() => setTarget(null)}
-        >
-          <p className="mb-4 text-[13px] text-muted">
-            이 표현을 쓰는 원두 {target.items.length}곳이 함께 붙는다. 집계는 Level 2 에서 한다.
-          </p>
-          {tree.map((l1) => (
-            <div key={l1.id} className="mb-4 last:mb-0">
-              <div className="mb-1.5 text-[12px] text-muted">{l1.labelKo}</div>
-              <div className="flex flex-wrap gap-1.5">
-                {l1.children.map((l2) => (
-                  <button
-                    key={l2.id}
-                    type="button"
-                    disabled={pending}
-                    onClick={() => run(() => attachNote(target.raw, l2.id))}
-                    className="inline-flex min-h-10 items-center rounded-full border border-hairline bg-surface-raised px-3.5 text-[14px] text-body"
-                  >
-                    {l2.labelKo}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </Modal>
+          onAttach={(nodeId) => run(() => attachNote(target.raw, nodeId))}
+          onCreate={(parentId, ko, en) =>
+            run(() => createNodeAndAttach(target.raw, parentId, ko, en))
+          }
+        />
       )}
     </div>
+  );
+}
+
+// 붙일 노드가 없을 수도 있다 — 기존 어느 L2 에도 안 들어가는 새 향미 범주면
+// 여기서 만들고 그 자리에서 붙인다. 다른 화면에 갔다 오면 무엇을 붙이려던 건지 잃는다.
+function AttachModal({
+  raw,
+  count,
+  tree,
+  pending,
+  onClose,
+  onAttach,
+  onCreate,
+}: {
+  raw: string;
+  count: number;
+  tree: Tree;
+  pending: boolean;
+  onClose: () => void;
+  onAttach: (nodeId: string) => void;
+  onCreate: (parentId: string, labelKo: string, labelEn: string) => void;
+}) {
+  const [mode, setMode] = useState<"attach" | "create">("attach");
+  const [parentId, setParentId] = useState(tree[0]?.id ?? "");
+  const [labelKo, setKo] = useState(raw);
+  const [labelEn, setEn] = useState("");
+
+  const slug = labelEn.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+  return (
+    <Modal title="어느 축에 붙일까" subject={raw} onClose={onClose}>
+      <p className="mb-3 text-[13px] text-muted">
+        이 표현을 쓰는 원두 {count}곳이 함께 붙는다. 집계는 Level 2 에서 한다.
+      </p>
+
+      <div className="mb-4 flex gap-2">
+        {(["attach", "create"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={`inline-flex min-h-10 items-center rounded-full px-3.5 text-[14px] font-medium ${
+              mode === m ? "bg-accent text-on-accent" : "border border-hairline text-body"
+            }`}
+          >
+            {m === "attach" ? "기존 축에 붙이기" : "새 축으로 만들기"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "attach" ? (
+        tree.map((l1) => (
+          <div key={l1.id} className="mb-4 last:mb-0">
+            <div className="mb-1.5 text-[12px] text-muted">{l1.labelKo}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {l1.children.map((l2) => (
+                <button
+                  key={l2.id}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => onAttach(l2.id)}
+                  className="inline-flex min-h-10 items-center rounded-full border border-hairline bg-surface-raised px-3.5 text-[14px] text-body"
+                >
+                  {l2.labelKo}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))
+      ) : (
+        <div>
+          <p className="mb-3 text-[13px] text-muted">
+            기존 어느 축에도 안 들어갈 때만 쓴다. <strong className="text-ink">id 는 집계 축이라
+            나중에 못 바꾼다.</strong>
+          </p>
+
+          <span className="mb-1.5 block text-[13px] text-muted">부모 (Level 1)</span>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {tree.map((l1) => (
+              <button
+                key={l1.id}
+                type="button"
+                onClick={() => setParentId(l1.id)}
+                className={`inline-flex min-h-10 items-center rounded-full px-3.5 text-[14px] ${
+                  parentId === l1.id
+                    ? "bg-accent text-on-accent"
+                    : "border border-hairline text-body"
+                }`}
+              >
+                {l1.labelKo}
+              </button>
+            ))}
+          </div>
+
+          <label className="mb-3 block">
+            <span className="mb-1.5 block text-[13px] text-muted">한글 라벨</span>
+            <input
+              value={labelKo}
+              onChange={(e) => setKo(e.target.value)}
+              className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none"
+            />
+          </label>
+          <label className="mb-3 block">
+            <span className="mb-1.5 block text-[13px] text-muted">영문 라벨 (id 의 근거)</span>
+            <input
+              value={labelEn}
+              onChange={(e) => setEn(e.target.value)}
+              placeholder="Tropical Fruit"
+              className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none placeholder:text-muted-soft"
+            />
+          </label>
+          {slug && (
+            <p className="mb-3 text-[12px] text-muted">
+              id → <code className="text-ink">{slug}</code>
+            </p>
+          )}
+
+          <button
+            type="button"
+            disabled={pending || !labelKo.trim() || !slug}
+            onClick={() => onCreate(parentId, labelKo, labelEn)}
+            className="h-11 w-full rounded-[10px] bg-cta text-[15px] font-semibold text-on-cta disabled:bg-cta-disabled"
+          >
+            만들고 붙이기
+          </button>
+        </div>
+      )}
+    </Modal>
   );
 }

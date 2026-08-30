@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import {
-  approveLookupWith,
+  approveLookupEdited,
   approveVendorWith,
   mergeLookup,
   mergeVendor,
+  rejectLookup,
+  rejectVendor,
   type PendingLookup,
   type PendingVendor,
 } from "@/app/actions";
@@ -21,7 +23,13 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 type Option = { id: string; nameKo: string };
-type Row = { kind: "vendor" | "lookup"; id: string; name: string; lookupKind?: string };
+type Row = {
+  kind: "vendor" | "lookup";
+  id: string;
+  name: string;
+  nameEn?: string | null;
+  lookupKind?: string;
+};
 type Action = { mode: "approve" | "merge"; row: Row };
 
 // 인라인 추가된 값은 pending 으로 들어온다 (설계 4-8).
@@ -74,6 +82,17 @@ export function PendingQueue({
         className="inline-flex min-h-10 items-center rounded-[8px] border border-hairline px-4 text-[14px] text-body"
       >
         기존 값에 흡수
+      </button>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          if (!confirm(`“${row.name}” 를 지운다. 이 값을 쓰던 원두에서도 빠진다.`)) return;
+          run(() => (row.kind === "vendor" ? rejectVendor(row.id) : rejectLookup(row.id)));
+        }}
+        className="inline-flex min-h-10 items-center rounded-[8px] border border-hairline px-4 text-[14px] text-danger"
+      >
+        지우기
       </button>
     </div>
   );
@@ -133,7 +152,13 @@ export function PendingQueue({
                   <td className="py-3 text-[16px] text-ink">{l.nameKo}</td>
                   <td className="py-3">
                     <Buttons
-                      row={{ kind: "lookup", id: l.id, name: l.nameKo, lookupKind: l.kind }}
+                      row={{
+                        kind: "lookup",
+                        id: l.id,
+                        name: l.nameKo,
+                        nameEn: l.nameEn,
+                        lookupKind: l.kind,
+                      }}
                     />
                   </td>
                 </tr>
@@ -148,11 +173,11 @@ export function PendingQueue({
           row={action.row}
           pending={pending}
           onClose={() => setAction(null)}
-          onSubmit={(aliases) =>
+          onSubmit={(nameKo, nameEn, aliases) =>
             run(() =>
               action.row.kind === "vendor"
                 ? approveVendorWith(action.row.id, aliases)
-                : approveLookupWith(action.row.id, aliases),
+                : approveLookupEdited(action.row.id, nameKo, nameEn, aliases),
             )
           }
         />
@@ -189,8 +214,9 @@ export function PendingQueue({
   );
 }
 
-// 승인하면서 별칭을 같이 받는다. 표기 흔들림을 흡수하는 경로가 aliases 뿐이라
-// 승인 시점이 그걸 적어둘 유일한 자리다.
+// 승인 시점이 이름을 정돈할 유일한 자리다.
+// 등록 중에 급히 친 표기("Ombligon")가 그대로 굳으면 나중에 고칠 경로가 없다.
+// 바꾼 원래 표기는 자동으로 별칭에 남아 다음에 같은 표기로 들어와도 갈라지지 않는다.
 function ApproveModal({
   row,
   pending,
@@ -200,8 +226,11 @@ function ApproveModal({
   row: Row;
   pending: boolean;
   onClose: () => void;
-  onSubmit: (aliases: string[]) => void;
+  onSubmit: (nameKo: string, nameEn: string, aliases: string[]) => void;
 }) {
+  const isLookup = row.kind === "lookup";
+  const [nameKo, setNameKo] = useState(row.name);
+  const [nameEn, setNameEn] = useState(row.nameEn ?? "");
   const [aliases, setAliases] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
 
@@ -212,8 +241,37 @@ function ApproveModal({
     setDraft("");
   };
 
+  const renamed = isLookup && nameKo.trim() !== row.name;
+
   return (
     <Modal title="승인" subject={row.name} onClose={onClose}>
+      {isLookup && (
+        <>
+          <label className="mb-3 block">
+            <span className="mb-1.5 block text-[13px] text-muted">한글 이름</span>
+            <input
+              value={nameKo}
+              onChange={(e) => setNameKo(e.target.value)}
+              className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none"
+            />
+          </label>
+          <label className="mb-3 block">
+            <span className="mb-1.5 block text-[13px] text-muted">영문 이름</span>
+            <input
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              placeholder="Ombligon"
+              className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none placeholder:text-muted-soft"
+            />
+          </label>
+          {renamed && (
+            <p className="mb-3 text-[12px] text-muted">
+              원래 표기 “{row.name}” 는 별칭으로 남는다.
+            </p>
+          )}
+        </>
+      )}
+
       <p className="mb-3 text-[13px] text-muted">
         같은 것을 가리키는 다른 표기를 함께 적어둔다. 다음에 그 표기로 들어와도 갈라지지 않는다.
       </p>
@@ -259,9 +317,9 @@ function ApproveModal({
 
       <button
         type="button"
-        disabled={pending}
-        onClick={() => onSubmit(aliases)}
-        className="mt-5 h-11 w-full rounded-[10px] bg-cta text-[15px] font-semibold text-on-cta active:bg-cta-pressed"
+        disabled={pending || !nameKo.trim()}
+        onClick={() => onSubmit(nameKo, nameEn, aliases)}
+        className="mt-5 h-11 w-full rounded-[10px] bg-cta text-[15px] font-semibold text-on-cta active:bg-cta-pressed disabled:bg-cta-disabled"
       >
         승인
       </button>

@@ -491,7 +491,7 @@ export async function adminStats() {
 }
 
 export type PendingVendor = { id: string; name: string; productCount: number };
-export type PendingLookup = { id: string; kind: LookupKind; nameKo: string };
+export type PendingLookup = { id: string; kind: LookupKind; nameKo: string; nameEn: string | null };
 
 export async function listPending() {
   const [vendors, lookups] = await Promise.all([
@@ -502,7 +502,7 @@ export async function listPending() {
     }),
     prisma.lookupValue.findMany({
       where: { status: LookupStatus.PENDING },
-      select: { id: true, kind: true, nameKo: true },
+      select: { id: true, kind: true, nameKo: true, nameEn: true },
       orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
     }),
   ]);
@@ -803,4 +803,111 @@ export async function listLookupsAdmin(kind: LookupKind) {
     orderBy: [{ sortWeight: "desc" }, { status: "asc" }, { nameKo: "asc" }],
     take: 400,
   });
+}
+
+/// 미매핑 raw 가 기존 어느 L2 에도 안 들어가는 새 향미 범주일 때.
+/// 노드를 만들고 그 자리에서 붙인다 — 다른 화면에 갔다 오면 무엇을 붙이려던 건지 잃는다.
+export async function createNodeAndAttach(
+  raw: string,
+  parentId: string,
+  labelKo: string,
+  labelEn: string,
+): Promise<AdminResult> {
+  const created = await createFlavorNodeL2(parentId, labelKo, labelEn);
+  if (!created.ok) return created;
+  return attachNote(raw, slugify(labelEn));
+}
+
+/// 승인하면서 이름까지 고친다.
+/// 등록 중에 급히 친 표기가 그대로 굳으면 안 된다 — "Ombligon" 을 받아
+/// "옴블리곤 / Ombligon" 으로 정돈하는 자리가 여기다.
+export async function approveLookupEdited(
+  id: string,
+  nameKo: string,
+  nameEn: string,
+  aliases: string[],
+): Promise<AdminResult> {
+  const ko = nameKo.trim();
+  const normalizedName = normalizeName(ko);
+  if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
+
+  const current = await prisma.lookupValue.findUniqueOrThrow({
+    where: { id },
+    select: { kind: true, nameKo: true },
+  });
+  const dup = await prisma.lookupValue.findUnique({
+    where: { kind_normalizedName: { kind: current.kind, normalizedName } },
+    select: { id: true, nameKo: true },
+  });
+  if (dup && dup.id !== id) {
+    return { ok: false, message: `「${dup.nameKo}」 와 같은 값이 된다. 흡수를 써달라` };
+  }
+
+  const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
+  // 원래 표기를 별칭으로 남긴다. 다음에 같은 표기로 들어와도 갈라지지 않는다
+  if (ko !== current.nameKo && !clean.includes(current.nameKo)) clean.push(current.nameKo);
+
+  await prisma.lookupValue.update({
+    where: { id },
+    data: {
+      nameKo: ko,
+      nameEn: nameEn.trim() || null,
+      normalizedName,
+      aliases: clean,
+      status: LookupStatus.APPROVED,
+    },
+  });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/// 오타 · 무의미한 값을 지운다. attributes JSONB 안의 참조도 함께 걷어낸다 —
+/// FK 가 없어 남겨두면 고아 id 가 된다 (설계 4-3).
+export async function rejectLookup(id: string): Promise<AdminResult> {
+  return prisma
+    .$transaction(async (tx) => {
+      const products = await tx.product.findMany({ select: { id: true, attributes: true } });
+      for (const p of products) {
+        const a = p.attributes as Record<string, unknown>;
+        let touched = false;
+        for (const key of ["countryId", "processId"]) {
+          if (a[key] === id) {
+            delete a[key];
+            touched = true;
+          }
+        }
+        for (const key of ["countryIds", "processIds", "varietyIds"]) {
+          const list = a[key];
+          if (Array.isArray(list) && list.includes(id)) {
+            a[key] = list.filter((v) => v !== id);
+            touched = true;
+          }
+        }
+        if (touched) {
+          await tx.product.update({
+            where: { id: p.id },
+            data: { attributes: a as Prisma.InputJsonValue },
+          });
+        }
+      }
+      await tx.lookupValue.delete({ where: { id } });
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/admin");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 로스터리는 원두가 붙어 있으면 못 지운다. 지우면 그 원두들이 갈 곳이 없다 —
+/// 그런 경우는 삭제가 아니라 흡수다.
+export async function rejectVendor(id: string): Promise<AdminResult> {
+  const count = await prisma.product.count({ where: { vendorId: id } });
+  if (count > 0) {
+    return { ok: false, message: `원두 ${count}개가 붙어 있다. 흡수를 써달라` };
+  }
+  await prisma.vendor.delete({ where: { id } });
+  revalidatePath("/admin");
+  return { ok: true };
 }
