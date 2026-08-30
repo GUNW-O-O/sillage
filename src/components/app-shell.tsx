@@ -16,34 +16,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {/* 상단 바 — 좌측 햄버거, 우측 + (요구 R1 의 진입점) */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-hairline bg-surface-raised px-2">
-        <button
-          type="button"
-          aria-label="메뉴"
-          onClick={() => setMenuOpen(true)}
-          className="flex h-11 w-11 items-center justify-center rounded-[10px]"
-        >
-          <span className="flex w-5 flex-col gap-[5px]">
-            <span className="h-[1.5px] w-full bg-ink" />
-            <span className="h-[1.5px] w-full bg-ink" />
-            <span className="h-[1.5px] w-full bg-ink" />
-          </span>
-        </button>
+      {/* 헤더가 없다. 목록이 화면 꼭대기부터 시작하고, 조작은 하단 플로팅 둘뿐이다.
+          엄지가 닿는 자리에 두려고 아래로 내렸다 — 위쪽 플로팅은 목록 상단을 가린다. */}
+      <main className="mx-auto w-full max-w-[560px] flex-1 px-4 pb-28">{children}</main>
 
-        <span className="font-serif text-[19px] text-ink">실라주</span>
+      {/* 좌 — 메뉴. 보조 액션이라 표면 톤으로 */}
+      <button
+        type="button"
+        aria-label="메뉴"
+        onClick={() => setMenuOpen(true)}
+        className="fixed bottom-[calc(20px+env(safe-area-inset-bottom))] left-4 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-hairline bg-surface-raised shadow-[0_2px_8px_rgba(20,20,19,.08)]"
+      >
+        <span className="flex w-5 flex-col gap-[5px]">
+          <span className="h-[1.5px] w-full bg-ink" />
+          <span className="h-[1.5px] w-full bg-ink" />
+          <span className="h-[1.5px] w-full bg-ink" />
+        </span>
+      </button>
 
-        <button
-          type="button"
-          aria-label="원두 추가"
-          onClick={() => setAddOpen(true)}
-          className="flex h-11 w-11 items-center justify-center rounded-[10px] text-[26px] leading-none text-ink"
-        >
-          +
-        </button>
-      </header>
-
-      <main className="mx-auto w-full max-w-[560px] flex-1 px-4">{children}</main>
+      {/* 우 — 기록 추가. 이 화면의 주 액션이라 CTA 색 */}
+      <button
+        type="button"
+        aria-label="원두 추가"
+        onClick={() => setAddOpen(true)}
+        className="fixed bottom-[calc(20px+env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-cta text-[28px] leading-none text-on-cta shadow-[0_2px_8px_rgba(20,20,19,.08)] active:bg-cta-pressed"
+      >
+        +
+      </button>
 
       {menuOpen && (
         <>
@@ -53,8 +52,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             aria-hidden
           />
           <nav className="fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col bg-canvas shadow-[0_2px_8px_rgba(20,20,19,.08)]">
-            <div className="flex h-14 items-center border-b border-hairline px-4">
-              <span className="font-serif text-[19px] text-ink">실라주</span>
+            <div className="flex h-16 items-center px-4">
+              <span className="font-serif text-[22px] text-ink">실라주</span>
             </div>
             <ul className="p-2">
               {NAV.map((n) => (

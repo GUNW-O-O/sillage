@@ -256,11 +256,35 @@ touch:
 
 ## Components
 
-### `app-bar`
+### 화면 골격 — 헤더를 두지 않는다
 
-높이 56px, 배경 `{colors.surface-raised}`, 하단 1px `{colors.hairline}`.
-제목은 `{typography.title}`. 화면 제목이 앱 정체성을 드러내는 자리(홈)에서만
-`{typography.display-md}` 명조.
+목록이 화면 꼭대기부터 시작한다. 앱 이름은 본문 맨 위 `{typography.display-lg}` 명조로
+놓이고 **스크롤과 함께 올라간다** — 고정 헤더가 세로 공간을 상시 먹을 만큼 담을
+내용이 없다.
+
+조작은 **하단 플로팅 둘**뿐이다.
+
+**`fab-menu`** — 좌하단. 56px 원형, 배경 `{colors.surface-raised}`,
+1px `{colors.hairline}`, 그림자. 보조 액션이라 표면 톤이다.
+
+**`fab-add`** — 우하단. 56px 원형, 배경 `{colors.cta}`, 글자 `{colors.on-cta}`, 그림자.
+**목록 화면의 주 액션**이라 CTA 색을 쓴다.
+
+둘 다 `bottom: calc(20px + env(safe-area-inset-bottom))`.
+**아래에 두는 이유는 엄지가 닿기 때문이다** — 위쪽 플로팅은 목록 상단을 가린다.
+
+### `sheet` — 검색 전용
+
+전체화면(`inset-0`), 배경 `{colors.canvas}`. 가운데 뜨는 박스형 모달을 쓰지 않는다 —
+폰에서 키보드가 올라오면 남는 공간이 없다.
+
+**시트는 검색까지만이다.** 짧고 휘발적이라 취소하고 나가는 게 흔하고 잃을 입력이 없다.
+**타이핑이 긴 등록 폼부터는 라우트로 나간다** — 시트는 URL 이 없어 새로고침 · 뒤로가기에
+취약한데, 등록 폼이 그렇게 날아가면 손해가 크다.
+
+**`sheet-context`** — 앞 단계에서 고른 값을 상단에 고정한다. 배경
+`{colors.surface-card}`, radius `{rounded.md}`, 최소 높이 56px, 우측에 `변경`.
+지금 어느 로스터리 안에 있는지가 원두명 검색 내내 보여야 한다.
 
 ### `search-input`
 

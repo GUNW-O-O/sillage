@@ -25,11 +25,16 @@ export default async function Home() {
 
   return (
     <AppShell>
+      {/* 헤더가 없으므로 앱 이름이 목록 맨 위에 놓이고 스크롤과 함께 올라간다 */}
+      <h1 className="pt-6 pb-2 font-serif text-[28px] leading-tight tracking-[-0.4px] text-ink">
+        실라주
+      </h1>
+
       {records.length === 0 ? (
-        <div className="py-16">
+        <div className="py-10">
           <p className="text-[16px] text-body">아직 기록이 없다.</p>
           <p className="mt-2 text-[13px] text-muted">
-            우측 상단 <span className="text-ink">+</span> 로 원두를 찾아 기록을 시작한다.
+            우측 아래 <span className="text-ink">+</span> 로 원두를 찾아 기록을 시작한다.
           </p>
         </div>
       ) : (
