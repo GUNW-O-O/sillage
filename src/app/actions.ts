@@ -17,6 +17,7 @@ import { prisma } from "@/lib/db";
 import { currentUserId } from "@/lib/current-user";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
 import { normalizeName } from "@/lib/normalize";
+import { collectLookupIds, describeProduct } from "@/lib/product-display";
 
 export type VendorHit = { id: string; name: string; status: VendorStatus };
 export type ProductHit = { id: string; name: string; noteCount: number; hasRecord: boolean };
@@ -910,4 +911,64 @@ export async function rejectVendor(id: string): Promise<AdminResult> {
   await prisma.vendor.delete({ where: { id } });
   revalidatePath("/admin");
   return { ok: true };
+}
+
+export type RecordDetail = {
+  productId: string;
+  productName: string;
+  vendorName: string;
+  fields: { label: string; value: string }[];
+  notes: { id: string; raw: string; nodeId: string | null; value: NoteHitValueInput }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/// 목록에서 기록을 열 때 쓴다. 모달이라 목록을 떠나지 않으므로 필요한 것을 한 번에 싣는다.
+export async function getRecordDetail(productId: string): Promise<RecordDetail | null> {
+  const userId = currentUserId();
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true,
+      name: true,
+      attributes: true,
+      vendor: { select: { name: true } },
+      sellerNotes: { select: { id: true, raw: true, nodeId: true }, orderBy: { position: "asc" } },
+      experiences: {
+        where: { userId },
+        select: {
+          createdAt: true,
+          updatedAt: true,
+          noteHits: { select: { sellerNoteId: true, value: true } },
+        },
+        take: 1,
+      },
+    },
+  });
+  if (!product) return null;
+
+  // attributes 안의 lookup id 는 FK 가 없어 조인이 안 된다. 모아서 따로 읽는다 (설계 4-3)
+  const ids = collectLookupIds(product.attributes);
+  const lookups = ids.length
+    ? await prisma.lookupValue.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, nameKo: true },
+      })
+    : [];
+
+  const exp = product.experiences[0];
+  const values = new Map(exp?.noteHits.map((h) => [h.sellerNoteId, h.value]) ?? []);
+
+  return {
+    productId: product.id,
+    productName: product.name,
+    vendorName: product.vendor.name,
+    fields: describeProduct(product.attributes, new Map(lookups.map((l) => [l.id, l.nameKo]))),
+    notes: product.sellerNotes.map((n) => ({
+      ...n,
+      value: (values.get(n.id) ?? "MISS") as NoteHitValueInput,
+    })),
+    createdAt: (exp?.createdAt ?? new Date()).toISOString(),
+    updatedAt: (exp?.updatedAt ?? new Date()).toISOString(),
+  };
 }

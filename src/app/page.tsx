@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { RecordList } from "@/components/record-list";
 import { currentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
 
@@ -12,7 +13,6 @@ export default async function Home() {
     where: { userId },
     select: {
       id: true,
-      updatedAt: true,
       noteHits: { select: { value: true } },
       product: {
         select: {
@@ -26,18 +26,23 @@ export default async function Home() {
     orderBy: { updatedAt: "desc" },
   });
 
+  const rows = records.map((r) => ({
+    id: r.id,
+    productId: r.product.id,
+    productName: r.product.name,
+    vendorName: r.product.vendor.name,
+    noteCount: r.product._count.sellerNotes,
+    // 느낀 것(HIT)이 몇 개였나. 목록에서 바로 보이는 것이 이 도구의 요점이다
+    hitCount: r.noteHits.filter((h) => h.value === "WEAK" || h.value === "STRONG").length,
+  }));
+
   return (
     <AppShell>
-      {/* 헤더가 없으므로 앱 이름이 목록 맨 위에 놓이고 스크롤과 함께 올라간다 */}
       <h1 className="pt-6 pb-2 font-serif text-[28px] leading-tight tracking-[-0.4px] text-ink">
         실라주
       </h1>
 
-      {records.length > 0 && (
-        <p className="pb-2 text-[12px] text-muted-soft">느낀 노트 / 판매자 노트</p>
-      )}
-
-      {records.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="py-10">
           <p className="text-[16px] text-body">아직 기록이 없다.</p>
           <p className="mt-2 text-[13px] text-muted">
@@ -45,36 +50,7 @@ export default async function Home() {
           </p>
         </div>
       ) : (
-        <ul className="py-2">
-          {records.map((r) => {
-            // 느낀 것(HIT)이 몇 개였나. 목록에서 바로 보이는 것이 이 도구의 요점이다
-            const hit = r.noteHits.filter(
-              (h) => h.value === "WEAK" || h.value === "STRONG",
-            ).length;
-            return (
-              <li key={r.id}>
-                <a
-                  href={`/products/${r.product.id}/record`}
-                  className="flex min-h-14 items-center justify-between gap-3 border-b border-hairline-soft py-3"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[17px] font-semibold text-ink">
-                      {r.product.name}
-                    </span>
-                    <span className="mt-0.5 block text-[13px] text-muted">
-                      {r.product.vendor.name}
-                    </span>
-                  </span>
-                  <span className="tabular shrink-0 text-[13px] text-muted">
-                    <span className="text-accent">{hit}</span>
-                    {" / "}
-                    {r.product._count.sellerNotes}
-                  </span>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
+        <RecordList records={rows} />
       )}
     </AppShell>
   );
