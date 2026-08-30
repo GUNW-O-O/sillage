@@ -972,3 +972,123 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
     updatedAt: (exp?.updatedAt ?? new Date()).toISOString(),
   };
 }
+
+export type FlavorTreeNode = {
+  id: string;
+  labelKo: string;
+  labelEn: string;
+  /// 이 노드에 매핑된 판매자 노트 수. 축이 실제로 쓰이는지 보여준다
+  noteCount: number;
+  /// 이 노드로 붙인 표현들. 잘못 앉은 것을 찾는 유일한 방법이다
+  aliases: { id: string; raw: string; scope: string }[];
+};
+
+export async function listFlavorTreeDetailed() {
+  const [nodes, aliases, counts] = await Promise.all([
+    prisma.flavorNode.findMany({
+      select: { id: true, level: true, parentId: true, labelKo: true, labelEn: true },
+      orderBy: [{ level: "asc" }, { labelKo: "asc" }],
+    }),
+    prisma.noteAlias.findMany({
+      select: { id: true, raw: true, nodeId: true, scope: true },
+      orderBy: { raw: "asc" },
+    }),
+    prisma.sellerNote.groupBy({ by: ["nodeId"], _count: { _all: true } }),
+  ]);
+
+  const countBy = new Map(counts.map((c) => [c.nodeId, c._count._all]));
+  const aliasBy = new Map<string, FlavorTreeNode["aliases"]>();
+  for (const a of aliases) {
+    const list = aliasBy.get(a.nodeId) ?? [];
+    list.push({ id: a.id, raw: a.raw, scope: a.scope });
+    aliasBy.set(a.nodeId, list);
+  }
+
+  const build = (n: (typeof nodes)[number]): FlavorTreeNode => ({
+    id: n.id,
+    labelKo: n.labelKo,
+    labelEn: n.labelEn,
+    noteCount: countBy.get(n.id) ?? 0,
+    aliases: aliasBy.get(n.id) ?? [],
+  });
+
+  return nodes
+    .filter((n) => n.level === 1)
+    .map((l1) => ({
+      ...build(l1),
+      children: nodes.filter((n) => n.parentId === l1.id).map(build),
+    }));
+}
+
+/// 잘못 앉은 표현을 다른 축으로 옮긴다 (설계 7-4 NoteAlias 재매핑).
+/// 그 표현을 쓰는 판매자 노트도 함께 옮기고 noteSetHash 를 재계산한다.
+/// 판정값은 그대로 둔다 — 축이 바뀐 것이지 판정이 바뀐 게 아니다.
+export async function remapAlias(aliasId: string, nodeId: string): Promise<AdminResult> {
+  return prisma
+    .$transaction(async (tx) => {
+      const alias = await tx.noteAlias.findUniqueOrThrow({
+        where: { id: aliasId },
+        select: { raw: true, nodeId: true },
+      });
+      if (alias.nodeId === nodeId) throw new Error("같은 축이다");
+
+      await tx.noteAlias.update({ where: { id: aliasId }, data: { nodeId } });
+
+      const targets = await tx.sellerNote.findMany({
+        where: { raw: alias.raw, nodeId: alias.nodeId },
+        select: { id: true, productId: true },
+      });
+      await tx.sellerNote.updateMany({
+        where: { id: { in: targets.map((t) => t.id) } },
+        data: { nodeId },
+      });
+
+      for (const productId of new Set(targets.map((t) => t.productId))) {
+        const r = await recomputeHash(tx, productId);
+        if (!r.ok) {
+          throw new Error(`옮기면 「${r.conflictName}」 과 같은 원두가 된다. 병합이 먼저다`);
+        }
+      }
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/admin");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 매핑 자체가 틀렸을 때. 별칭을 지우고 그 표현을 쓰는 노트를 미매핑으로 되돌린다 —
+/// 다시 판단할 수 있게 큐로 보내는 것이지 데이터를 버리는 것이 아니다.
+export async function unmapAlias(aliasId: string): Promise<AdminResult> {
+  return prisma
+    .$transaction(async (tx) => {
+      const alias = await tx.noteAlias.findUniqueOrThrow({
+        where: { id: aliasId },
+        select: { raw: true, nodeId: true },
+      });
+
+      const targets = await tx.sellerNote.findMany({
+        where: { raw: alias.raw, nodeId: alias.nodeId },
+        select: { id: true, productId: true },
+      });
+      await tx.sellerNote.updateMany({
+        where: { id: { in: targets.map((t) => t.id) } },
+        data: { nodeId: null },
+      });
+      await tx.noteAlias.delete({ where: { id: aliasId } });
+
+      for (const productId of new Set(targets.map((t) => t.productId))) {
+        const r = await recomputeHash(tx, productId);
+        if (!r.ok) {
+          throw new Error(`되돌리면 「${r.conflictName}」 과 같은 원두가 된다. 병합이 먼저다`);
+        }
+      }
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidatePath("/admin");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}

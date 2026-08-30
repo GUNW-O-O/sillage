@@ -135,6 +135,61 @@ async function main() {
   ok(recomputed !== hashBeforeDelete, "지우면 해시가 달라진다");
   ok(afterDelete.sellerNotes.length === 2, "향미가 아닌 표기가 사라진다");
 
+  // ── 재매핑: 잘못 앉은 표현을 다른 축으로 옮긴다 (설계 7-4).
+  // 축이 바뀐 것이지 판정이 바뀐 게 아니므로 판정값은 살아 있어야 한다
+  const aliasRow = await prisma.noteAlias.findFirstOrThrow({
+    where: { raw: "누룩" },
+    select: { id: true },
+  });
+  const hashBeforeRemap = (
+    await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: { noteSetHash: true },
+    })
+  ).noteSetHash;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.noteAlias.update({ where: { id: aliasRow.id }, data: { nodeId: "sour" } });
+    await tx.sellerNote.updateMany({ where: { raw: "누룩" }, data: { nodeId: "sour" } });
+    const fresh = await tx.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: { sellerNotes: { select: { raw: true, nodeId: true } } },
+    });
+    await tx.product.update({
+      where: { id: product.id },
+      data: { noteSetHash: computeNoteSetHash(fresh.sellerNotes) },
+    });
+  });
+
+  const remapped = await prisma.product.findUniqueOrThrow({
+    where: { id: product.id },
+    select: { noteSetHash: true, sellerNotes: { select: { raw: true, nodeId: true } } },
+  });
+  ok(remapped.noteSetHash !== hashBeforeRemap, "재매핑하면 noteSetHash 가 다시 계산된다");
+  ok(
+    remapped.sellerNotes.find((n) => n.raw === "누룩")?.nodeId === "sour",
+    "그 표현을 쓰는 판매자 노트가 함께 옮겨진다",
+  );
+  const hitAfterRemap = await prisma.noteHit.findFirst({
+    where: { experienceId: exp.id, sellerNoteId: nurukNote.id },
+    select: { value: true },
+  });
+  ok(hitAfterRemap?.value === NoteHitValue.STRONG, "재매핑해도 판정값은 그대로다");
+
+  // ── 매핑 지우기: 미매핑 큐로 되돌린다. 데이터를 버리는 것이 아니라 다시 판단하게 하는 것
+  await prisma.$transaction(async (tx) => {
+    await tx.sellerNote.updateMany({ where: { raw: "누룩" }, data: { nodeId: null } });
+    await tx.noteAlias.delete({ where: { id: aliasRow.id } });
+  });
+  const backToQueue = await prisma.sellerNote.count({
+    where: { raw: "누룩", nodeId: null, productId: product.id },
+  });
+  ok(backToQueue === 1, "매핑을 지우면 미매핑 큐로 돌아간다");
+  ok(
+    (await prisma.noteHit.count({ where: { sellerNoteId: nurukNote.id } })) === 1,
+    "미매핑으로 돌려도 판정은 남는다",
+  );
+
   // ── lookup 병합: attributes JSONB 안의 id 에는 FK 를 걸 수 없다 (설계 4-3).
   // 무결성은 애플리케이션이 진다 — 참조가 실제로 갈아끼워지는지 확인한다
   const dupName = `${TAG}무산소표기`;
