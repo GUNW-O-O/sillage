@@ -8,6 +8,7 @@ import {
   searchLookups,
   type LookupOption,
 } from "@/app/actions";
+import { createSelectionResolver, type Resolver } from "@/lib/selection-resolver";
 
 // lookup 에 값이 없다는 이유로 기록이 막히면 안 된다 (설계 4-8).
 // country 만 닫힌 집합이라 추가를 막는다.
@@ -34,21 +35,15 @@ export function LookupPicker({
   // visible 이 selected 를 걸러내므로 후보 목록에서도 빠져 **통째로 사라진 것처럼 보인다.**
   // 등록 폼에서만 쓰던 때는 selected 가 늘 비어 있어 안 드러났다.
   //
-  // 한 번 물어본 id 는 ref 로 기억한다. 지워진 lookup 을 가리키는 id 는 응답이 비어
-  // 영영 안 채워지는데, 그것을 상태로 판단하면 요청이 무한히 돈다
-  const asked = useRef(new Set<string>());
+  // 절차와 그 함정은 selection-resolver.ts 에 있고 테스트가 지킨다.
+  // selected 는 렌더마다 새 배열이라 이 effect 는 매 렌더 돈다 — 리졸버가 이미 물어본
+  // id 를 기억하므로 첫 회 이후로는 즉시 빠져나간다
+  const resolve = useRef<Resolver>(null);
+  resolve.current ??= createSelectionResolver(getLookupsByIds, (rows) =>
+    setChosen((c) => [...c, ...rows.filter((r) => !c.some((x) => x.id === r.id))]),
+  );
   useEffect(() => {
-    const missing = selected.filter((id) => !asked.current.has(id));
-    if (missing.length === 0) return;
-    for (const id of missing) asked.current.add(id);
-    let cancelled = false;
-    getLookupsByIds(missing).then((rows) => {
-      if (cancelled || rows.length === 0) return;
-      setChosen((c) => [...c, ...rows.filter((r) => !c.some((x) => x.id === r.id))]);
-    });
-    return () => {
-      cancelled = true;
-    };
+    resolve.current?.(selected);
   }, [selected]);
 
   useEffect(() => {

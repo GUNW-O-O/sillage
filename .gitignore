@@ -39,3 +39,7 @@ next-env.d.ts
 .claude/
 .claude.local.md
 docs/
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
