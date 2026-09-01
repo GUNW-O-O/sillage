@@ -168,6 +168,47 @@ async function main() {
     "다시 저장하면 표시가 사라진다",
   );
 
+  // ── 스펙(attributes) 수정은 동일성 키를 건드리지 않는다.
+  // 원두 상세에서 나라 · 가공을 고쳐도 기존 판정이 그대로여야 수정을 열어둘 수 있다.
+  // attributes 는 @@unique([vendorId, category, normalizedName, noteSetHash]) 밖이라
+  // 이름 수정과 달리 충돌 검사가 필요 없다 — 그 주장을 여기서 지킨다
+  const beforeSpec = await prisma.product.findUniqueOrThrow({
+    where: { id: product.id },
+    select: { noteSetHash: true, normalizedName: true },
+  });
+  const hitsBefore = await prisma.noteHit.count({
+    where: { sellerNote: { productId: product.id } },
+  });
+
+  await prisma.product.update({
+    where: { id: product.id },
+    data: { attributes: { kind: "single", infused: false, region: "예가체프", farm: "구지" } },
+  });
+
+  const afterSpec = await prisma.product.findUniqueOrThrow({
+    where: { id: product.id },
+    select: { noteSetHash: true, normalizedName: true, attributes: true },
+  });
+  ok(afterSpec.noteSetHash === beforeSpec.noteSetHash, "스펙을 고쳐도 noteSetHash 가 안 변한다");
+  ok(
+    afterSpec.normalizedName === beforeSpec.normalizedName,
+    "스펙을 고쳐도 정규화 이름이 안 변한다",
+  );
+  ok(
+    (afterSpec.attributes as { region?: string }).region === "예가체프",
+    "고친 스펙이 실제로 저장된다",
+  );
+  ok(
+    (await prisma.noteHit.count({ where: { sellerNote: { productId: product.id } } })) ===
+      hitsBefore,
+    "스펙을 고쳐도 판정 수가 안 변한다",
+  );
+  ok(
+    (await renderRecord(product.id)).find((r) => r.raw === "자스민꽃")?.value ===
+      NoteHitValue.STRONG,
+    "스펙을 고쳐도 판정 값이 그대로다",
+  );
+
   await cleanup();
   if (failed > 0) {
     console.error(`\n${failed}건 실패`);

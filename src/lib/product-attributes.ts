@@ -67,3 +67,36 @@ export function pruneAttributes(a: CoffeeAttributes): Record<string, unknown> {
   }
   return out;
 }
+
+/// `pruneAttributes` 의 역방향. JSONB 를 폼이 쓰는 형태로 되읽는다.
+/// **DB 에서 오는 값은 타입이 없다** — attributes 는 Json 컬럼이라 스키마가 보장하는 것이
+/// 하나도 없고, 어드민 병합이나 옛 등록이 남긴 모양이 섞여 들어올 수 있다.
+/// 모르는 값은 버리고 기본값으로 떨어뜨린다. 폼이 깨지는 것보다 빈 칸이 낫다.
+export function parseAttributes(raw: unknown): CoffeeAttributes {
+  const a = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
+  const strArr = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
+
+  const kind: CoffeeAttributes["kind"] = a.kind === "blend" ? "blend" : "single";
+  const roast = ROAST_LEVELS.find((r) => r.value === a.roastLevel)?.value;
+
+  return {
+    kind,
+    varietyIds: strArr(a.varietyIds) ?? [],
+    infused: a.infused === true,
+    decaf: a.decaf === true ? true : undefined,
+    roastLevel: roast,
+    agtron: typeof a.agtron === "number" && !Number.isNaN(a.agtron) ? a.agtron : undefined,
+    // 구성이 바뀌면 반대쪽 필드는 화면에서 사라지지만 JSONB 에는 남아 있을 수 있다.
+    // 되읽을 때 현재 구성에 해당하는 것만 살린다 — 안 그러면 저장할 때 다시 섞인다
+    processId: kind === "single" ? str(a.processId) : undefined,
+    processIds: kind === "blend" ? strArr(a.processIds) : undefined,
+    countryId: kind === "single" ? str(a.countryId) : undefined,
+    countryIds: kind === "blend" ? strArr(a.countryIds) : undefined,
+    region: kind === "single" ? str(a.region) : undefined,
+    farm: kind === "single" ? str(a.farm) : undefined,
+    producer: kind === "single" ? str(a.producer) : undefined,
+    lot: kind === "single" ? str(a.lot) : undefined,
+  };
+}

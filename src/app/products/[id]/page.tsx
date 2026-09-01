@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { getProductDetail } from "@/app/actions";
 import { ProductNotesEditor } from "@/components/product-notes-editor";
+import { ProductSpecEditor } from "@/components/product-spec-editor";
 
 // 원두 상세 — 이 원두의 판매자 노트가 무엇이고 사람들이 무엇을 느꼈나.
 // Product 은 공유 자산이라 수정을 누구나 한다 (설계 4-3 편집 모델 개정).
@@ -20,20 +21,19 @@ export default async function ProductPage({ params }: PageProps<"/products/[id]"
       </Link>
 
       <header className="mt-1">
-        <div className="text-[13px] text-muted">{product.vendorName}</div>
-        <h1 className="mt-0.5 text-[22px] font-semibold leading-tight text-ink">{product.name}</h1>
+        <div className="text-[16px] text-muted">{product.vendorName}</div>
+        {/* 화면 제목은 명조다 (DESIGN 타입 위계). 명조로 가면서 굵기는 뺀다 —
+            강조는 크기 먼저, 굵기 나중 */}
+        <h1 className="mt-0.5 font-serif text-[28px] leading-tight tracking-[-0.4px] text-ink">
+          {product.name}
+        </h1>
       </header>
 
-      {product.fields.length > 0 && (
-        <dl className="mt-4 rounded-[10px] bg-surface-card px-4 py-3">
-          {product.fields.map((f) => (
-            <div key={f.label} className="flex gap-3 py-1">
-              <dt className="w-[64px] shrink-0 text-[13px] text-muted">{f.label}</dt>
-              <dd className="text-[14px] text-body">{f.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <ProductSpecEditor
+        productId={product.id}
+        attributes={product.attributes}
+        fields={product.fields}
+      />
 
       <hr className="my-6 border-hairline-soft" />
 
