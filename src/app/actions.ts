@@ -102,6 +102,44 @@ export async function searchProducts(vendorId: string, query: string): Promise<P
   }));
 }
 
+export type ProductGlobalHit = ProductHit & { vendorName: string };
+
+/// 로스터리를 안 고르고 원두 이름으로 바로 찾는다.
+///
+/// **로스터리명을 반드시 같이 준다.** 원두 이름은 전역 유일하지 않다 — 동일성 키가
+/// `[vendorId, category, normalizedName, noteSetHash]` 라 같은 이름이 로스터리마다 있고,
+/// 같은 로스터리 안에서도 노트 집합이 다르면 같은 이름이 둘 설 수 있다.
+///
+/// `searchProducts` 와 나눠 둔다. 저쪽은 `vendorId` 로 이미 좁혀져 있어 `contains` 로 충분하고
+/// 빈 질의에 그 로스터리 원두를 전부 보여주는 동작이 있다. 전역은 둘 다 성립하지 않는다.
+export async function searchProductsGlobal(query: string): Promise<ProductGlobalHit[]> {
+  const q = normalizeName(query);
+  if (q.length < MIN_QUERY_LENGTH) return [];
+  const userId = currentUserId();
+
+  // `LIKE 'q%'` 와 `%` 둘 다 Product_normalizedName_idx 를 탄다.
+  // `contains`(= LIKE '%q%')를 안 쓰는 이유는 앞 일치에 우선순위를 줘야 하기 때문이다 —
+  // 전역에서는 후보가 많아 정렬이 곧 결과다
+  return prisma.$queryRaw<ProductGlobalHit[]>`
+    SELECT
+      p.id,
+      p.name,
+      v.name AS "vendorName",
+      (SELECT count(*) FROM "SellerNote" sn WHERE sn."productId" = p.id)::int AS "noteCount",
+      EXISTS (
+        SELECT 1 FROM "Experience" e WHERE e."productId" = p.id AND e."userId" = ${userId}
+      ) AS "hasRecord"
+    FROM "Product" p
+    JOIN "Vendor" v ON v.id = p."vendorId"
+    WHERE p."normalizedName" LIKE ${q + "%"}
+       OR p."normalizedName" % ${q}
+    ORDER BY
+      (p."normalizedName" LIKE ${q + "%"}) DESC,
+      similarity(p."normalizedName", ${q}) DESC
+    LIMIT 8
+  `;
+}
+
 /// 등록 폼의 접힌 상세에 쓰는 lookup. 승인된 것과 내가 추가한 pending 이 같이 보인다.
 export async function listApprovedLookups(kind: "COUNTRY" | "VARIETY" | "PROCESS") {
   return prisma.lookupValue.findMany({
