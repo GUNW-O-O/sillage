@@ -17,6 +17,7 @@ import { prisma } from "@/lib/db";
 import { currentUserId } from "@/lib/current-user";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
 import { normalizeName } from "@/lib/normalize";
+import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
 import { collectLookupIds, describeProduct } from "@/lib/product-display";
 
 export type VendorHit = { id: string; name: string; status: VendorStatus };
@@ -27,8 +28,17 @@ export type ProductHit = { id: string; name: string; noteCount: number; hasRecor
 /// aliases 배열도 같이 훑는다 (설계 4-2).
 export async function searchVendors(query: string): Promise<VendorHit[]> {
   const q = normalizeName(query);
-  if (q.length === 0) return [];
+  // 화면도 같은 하한을 지키지만 서버가 다시 본다 — 액션은 그대로 열린 엔드포인트다
+  if (q.length < MIN_QUERY_LENGTH) return [];
 
+  // `LIKE 'q%'` 가 앞 일치를, `%` 가 오타를 맡는다. **둘 다 GIN 트라이그램 인덱스를 탄다**
+  // (Bitmap Index Scan 두 번 + BitmapOr) — scripts/check-search.ts 가 확인한다.
+  //
+  // `%` 를 `similarity(col, q) > 0.4` 로 바꾸지 말 것. GIN 은 연산자만 가속하고
+  // 함수 호출은 못 붙어서, 임계값을 올리려다 인덱스를 통째로 잃는다 (실측: Seq Scan).
+  // 임계값을 정말 올려야 하면 `SET LOCAL pg_trgm.similarity_threshold` 를 트랜잭션 안에서
+  // 건다. 단 타자마다 도는 검색이 트랜잭션이 되어 왕복이 는다 — 지금은 2글자 하한이
+  // 후보 폭발을 막고 있어 필요가 없다.
   return prisma.$queryRaw<VendorHit[]>`
     SELECT id, name, status
     FROM "Vendor"
@@ -108,7 +118,9 @@ export type NoteSuggestion = { raw: string; nodeId: string; labelKo: string };
 /// 타이핑이 줄어 노트 입력도 탭에 수렴한다.
 export async function searchNoteSuggestions(query: string): Promise<NoteSuggestion[]> {
   const q = query.trim();
-  if (q.length === 0) return [];
+  // NoteAlias 는 표현이 쌓이는 만큼 무한히 늘고 이 검색은 전역이다.
+  // `searchProducts` 와 달리 후보를 먼저 좁혀줄 축이 없어 하한이 필요하다
+  if (q.length < MIN_QUERY_LENGTH) return [];
 
   const [aliases, nodes] = await Promise.all([
     prisma.noteAlias.findMany({

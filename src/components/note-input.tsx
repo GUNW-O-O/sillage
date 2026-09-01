@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { searchNoteSuggestions, type NoteSuggestion } from "@/app/actions";
+import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
 import type { NoteInput } from "@/app/actions";
 
 // 노트 입력이 유일한 진짜 병목이다 (설계 7-1).
@@ -23,7 +24,8 @@ export function NoteChips({
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(() => {
-      if (query.trim().length === 0) return setSuggestions([]);
+      // 한 글자로는 트라이그램이 좁힐 것이 없다 — 별칭 테이블 전체가 후보가 된다
+      if (query.trim().length < MIN_QUERY_LENGTH) return setSuggestions([]);
       searchNoteSuggestions(query).then((r) => !cancelled && setSuggestions(r));
     }, 180);
     return () => {

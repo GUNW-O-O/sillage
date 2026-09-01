@@ -102,6 +102,9 @@ model NoteAlias {
   /// (migrations/..._note_alias_public_unique).
   @@unique([normalizedRaw, scope, createdById])
   @@index([nodeId])
+  /// 노트 입력의 자동완성이 타이핑마다 이 컬럼을 `contains` 로 훑는다.
+  /// 별칭은 표현이 쌓이는 만큼 무한히 는다 — 여기가 셋 중 제일 커진다
+  @@index([normalizedRaw(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // ─────────────────────────────────────────── lookup (4-8)
@@ -177,6 +180,12 @@ model Vendor {
   products  Product[]
 
   @@index([status])
+  /// 근접 검색용 GIN 트라이그램 (설계 8장).
+  /// **raw SQL 마이그레이션으로 만들면 다음 `migrate dev` 가 지운다** —
+  /// schema.prisma 에 없는 인덱스를 Prisma 가 드리프트로 보고 DROP 을 넣는다.
+  /// 실제로 20260830105447 이 만든 것을 20260830124500 이 전부 지웠다.
+  /// 스키마 안에 두는 것이 유일한 방어다
+  @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // ─────────────────────────────────────────── Product (4-3)
@@ -216,6 +225,8 @@ model Product {
   /// 동일성 키 (4-3)
   @@unique([vendorId, category, normalizedName, noteSetHash])
   @@index([vendorId])
+  /// 원두명 근접 검색. `contains` 는 LIKE '%q%' 라 B-tree 로는 못 좁힌다
+  @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 /// 판매자 노트. 항목 단위 행으로 저장한다 — 배열/JSON 이면 noteHits 가 참조할 수 없다
