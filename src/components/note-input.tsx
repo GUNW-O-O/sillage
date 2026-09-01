@@ -13,9 +13,13 @@ import type { NoteInput } from "@/app/actions";
 export function NoteChips({
   notes,
   onChange,
+  placeholder = "봉투에 적힌 노트를 하나씩",
 }: {
   notes: NoteInput[];
   onChange: (next: NoteInput[]) => void;
+  /// 등록 폼은 **봉투에 적힌 판매자의 주장**을 옮기는 자리고, 기록 화면의 `내가 느낀 향` 은
+  /// 봉투에 없는 것을 적는 자리다. 같은 입력 컴포넌트를 쓰되 무엇을 적으라는지는 갈린다
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<NoteSuggestion[]>([]);
@@ -81,7 +85,7 @@ export function NoteChips({
             add(hit ? { raw: hit.raw, nodeId: hit.nodeId } : { raw: query, nodeId: null });
           }
         }}
-        placeholder="봉투에 적힌 노트를 하나씩"
+        placeholder={placeholder}
         className="h-12 w-full rounded-[10px] bg-surface-sunken px-[14px] text-[16px] text-ink outline-none placeholder:text-muted-soft focus:ring-3 focus:ring-accent-tint"
       />
 

@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { deleteRecord, saveRecord, type NoteHitValueInput } from "@/app/actions";
+import { deleteRecord, saveRecord, type NoteHitValueInput, type NoteInput } from "@/app/actions";
+
+import { ExtraNotes } from "./extra-notes";
 
 // 4상태 순환 (설계 4-5).
 // 미선택 상태를 두지 않는다 — 안 건드린 것이 곧 `못 느낌` 이다.
@@ -25,17 +27,20 @@ export function NoteCycle({
   productId,
   notes,
   initial,
+  initialExtra,
   hasRecord,
 }: {
   productId: string;
   notes: NoteRow[];
   initial: Record<string, NoteHitValueInput>;
+  initialExtra: NoteInput[];
   hasRecord: boolean;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<Record<string, NoteHitValueInput>>(() =>
     Object.fromEntries(notes.map((n) => [n.id, initial[n.id] ?? "MISS"])),
   );
+  const [extra, setExtra] = useState<NoteInput[]>(initialExtra);
   const [pending, startTransition] = useTransition();
 
   // 1탭 순환. `강함` 다음은 `못 느낌` 으로 돌아온다 — 순환 자체가 되돌리는 경로다
@@ -58,6 +63,7 @@ export function NoteCycle({
       await saveRecord(
         productId,
         notes.map((n) => ({ sellerNoteId: n.id, value: values[n.id] })),
+        extra,
       );
       router.push("/");
     });
@@ -108,6 +114,8 @@ export function NoteCycle({
           );
         })}
       </ul>
+
+      <ExtraNotes notes={extra} onChange={setExtra} editable />
 
       <div className="fixed inset-x-0 bottom-0 border-t border-hairline bg-surface-raised">
         <div className="mx-auto w-full max-w-[560px] px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))]">

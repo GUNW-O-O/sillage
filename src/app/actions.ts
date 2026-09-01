@@ -328,6 +328,9 @@ export type NoteHitValueInput = "MISS" | "UNSURE" | "WEAK" | "STRONG";
 export async function saveRecord(
   productId: string,
   hits: { sellerNoteId: string; value: NoteHitValueInput }[],
+  /// 판매자가 안 적었는데 내가 느낀 향 (설계 4-4 `ExtraNote`).
+  /// 판정값이 없다 — 판매자의 주장이 없으니 대조할 좌변이 없고, 적었다는 사실 자체가 값이다
+  extraNotes: NoteInput[] = [],
 ): Promise<{ ok: true }> {
   const userId = currentUserId();
 
@@ -364,6 +367,23 @@ export async function saveRecord(
           sellerNoteId: hit.sellerNoteId,
           value: hit.value as NoteHitValue,
         },
+      });
+    }
+
+    // 판매자 노트와 달리 통째로 갈아끼운다. noteHits 는 판정이 붙어 있어 부분 보존이
+    // 필요하지만(설계 4-4) ExtraNote 에는 붙는 것이 없다 — 지운 것은 안 느낀 것이다.
+    // 개수가 적어 교체 비용도 무시할 만하다
+    await tx.extraNote.deleteMany({ where: { experienceId: experience.id } });
+    if (extraNotes.length > 0) {
+      await tx.extraNote.createMany({
+        data: extraNotes.map((n) => ({
+          experienceId: experience.id,
+          raw: n.raw,
+          // 자동완성에 없는 표현이면 null 로 남는다. **raw 는 절대 버리지 않는다** —
+          // 로스터리 간 표현 비교의 유일한 근거다 (요구 4장).
+          // 축이 안 붙은 것은 집계에 안 들어가고 어드민 미매핑 큐에서 붙인다
+          nodeId: n.nodeId,
+        })),
       });
     }
   });
@@ -977,6 +997,8 @@ export type RecordDetail = {
     /// 화면에 떠 있었다는 전제 위에 서는데, 나중에 추가된 것은 그 전제가 깨진다 (설계 7-4)
     addedAfterRecord: boolean;
   }[];
+  /// 판매자가 안 적었는데 내가 느낀 향. 판정이 없어 값이 아니라 목록이다
+  extraNotes: NoteInput[];
   createdAt: string;
   updatedAt: string;
 };
@@ -1001,6 +1023,7 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
           createdAt: true,
           updatedAt: true,
           noteHits: { select: { sellerNoteId: true, value: true } },
+          extraNotes: { select: { raw: true, nodeId: true }, orderBy: { createdAt: "asc" } },
         },
         take: 1,
       },
@@ -1032,6 +1055,7 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
       value: (values.get(n.id) ?? "MISS") as NoteHitValueInput,
       addedAfterRecord: !!exp && n.addedAt > exp.updatedAt,
     })),
+    extraNotes: exp?.extraNotes ?? [],
     createdAt: (exp?.createdAt ?? new Date()).toISOString(),
     updatedAt: (exp?.updatedAt ?? new Date()).toISOString(),
   };

@@ -128,6 +128,65 @@ async function main() {
     "기록을 지우면 noteHits 가 cascade 로 정리된다",
   );
 
+  // ── 내가 느낀 향 (ExtraNote). 판매자가 안 적은 축을 담는다.
+  // 판정이 안 붙으므로 판매자 노트처럼 부분 보존할 것이 없다 — 저장 때마다 통째 교체다.
+  // 위에서 기록을 지웠으므로 다시 만든다
+  const exp2 = await upsertRecord(product.id, [
+    { sellerNoteId: n0.id, value: NoteHitValue.STRONG },
+    { sellerNoteId: n1.id, value: NoteHitValue.MISS },
+    { sellerNoteId: n2.id, value: NoteHitValue.UNSURE },
+  ]);
+  const hashBefore = (
+    await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: { noteSetHash: true },
+    })
+  ).noteSetHash;
+
+  await prisma.extraNote.createMany({
+    data: [
+      { experienceId: exp2, raw: "홍차", nodeId: "black_tea" },
+      // 자동완성에 없는 표현. raw 는 버리지 않는다 (요구 4장)
+      { experienceId: exp2, raw: "젖은 종이", nodeId: null },
+    ],
+  });
+  const extras = await prisma.extraNote.findMany({
+    where: { experienceId: exp2 },
+    select: { raw: true, nodeId: true },
+  });
+  ok(extras.length === 2, `내가 느낀 향이 기록에 붙는다 (${extras.length}건)`);
+  ok(
+    extras.some((e) => e.raw === "젖은 종이" && e.nodeId === null),
+    "축이 안 붙어도 raw 는 저장된다 — 미매핑 큐에서 붙인다",
+  );
+
+  ok(
+    (await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: { noteSetHash: true },
+    })).noteSetHash === hashBefore,
+    "내가 느낀 향은 Product 동일성 키를 안 건드린다",
+  );
+
+  // 저장 화면이 하는 일 그대로 — 지우고 다시 넣는다. 중복이 쌓이면 안 된다
+  await prisma.extraNote.deleteMany({ where: { experienceId: exp2 } });
+  await prisma.extraNote.createMany({ data: [{ experienceId: exp2, raw: "홍차", nodeId: "black_tea" }] });
+  ok(
+    (await prisma.extraNote.count({ where: { experienceId: exp2 } })) === 1,
+    "다시 저장하면 목록이 통째로 교체된다 (중복이 안 쌓인다)",
+  );
+
+  ok(
+    (await prisma.noteHit.count({ where: { experienceId: exp2 } })) === 3,
+    "내가 느낀 향을 고쳐도 판매자 노트 판정은 그대로다",
+  );
+
+  await prisma.experience.delete({ where: { id: exp2 } });
+  ok(
+    (await prisma.extraNote.count({ where: { experienceId: exp2 } })) === 0,
+    "기록을 지우면 내가 느낀 향도 cascade 로 사라진다",
+  );
+
   await prisma.product.deleteMany({ where: { name: { startsWith: "[기록검증]" } } });
   ok(
     (await prisma.sellerNote.count({ where: { productId: product.id } })) === 0,

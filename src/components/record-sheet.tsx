@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
+import { ExtraNotes } from "./extra-notes";
+import { Close, Pencil, Trash } from "./icons";
+
 import {
   deleteRecord,
   getRecordDetail,
   saveRecord,
   type NoteHitValueInput,
+  type NoteInput,
   type RecordDetail,
 } from "@/app/actions";
 
@@ -53,36 +57,21 @@ function IconButton({
   );
 }
 
-const Pencil = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-    <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" strokeLinejoin="round" />
-    <path d="M14.5 6.5 17.5 9.5" />
-  </svg>
-);
-
-const Trash = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const Close = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-    <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
-  </svg>
-);
-
 export function RecordSheet({ productId, onClose }: { productId: string; onClose: () => void }) {
   const router = useRouter();
   const [detail, setDetail] = useState<RecordDetail | null>(null);
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<Record<string, NoteHitValueInput>>({});
+  const [extra, setExtra] = useState<NoteInput[]>([]);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     getRecordDetail(productId).then((d) => {
       setDetail(d);
-      if (d) setValues(Object.fromEntries(d.notes.map((n) => [n.id, n.value])));
+      if (d) {
+        setValues(Object.fromEntries(d.notes.map((n) => [n.id, n.value])));
+        setExtra(d.extraNotes);
+      }
     });
   }, [productId]);
 
@@ -107,6 +96,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
       await saveRecord(
         detail.productId,
         detail.notes.map((n) => ({ sellerNoteId: n.id, value: values[n.id] })),
+        extra,
       );
       setEditing(false);
       router.refresh();
@@ -135,6 +125,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
               onClick={() => {
                 if (editing && detail) {
                   setValues(Object.fromEntries(detail.notes.map((n) => [n.id, n.value])));
+                  setExtra(detail.extraNotes);
                 }
                 setEditing((e) => !e);
               }}
@@ -154,9 +145,22 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
             <>
               <div className="pt-4">
                 <div className="text-[13px] text-muted">{detail.vendorName}</div>
-                <h2 className="mt-0.5 text-[21px] font-semibold leading-tight text-ink">
-                  {detail.productName}
-                </h2>
+                <div className="mt-0.5 flex items-start justify-between gap-3">
+                  <h2 className="min-w-0 text-[21px] font-semibold leading-tight text-ink">
+                    {detail.productName}
+                  </h2>
+                  {/* 이 시트는 **내가 느낀 것**을 보는 자리다. 원두 쪽 정보와 남들의 판정,
+                      그리고 스펙 · 노트를 고치는 자리는 원두 상세다 — 이름 옆이 그 입구다.
+                      아래에 두면 내 판정을 다 지나쳐야 닿는다.
+                      `button-secondary` 규격이다 (DESIGN). muted 텍스트로 두면 눌리는
+                      것으로 안 읽힌다 — 스펙이 틀린 걸 발견해도 갈 곳을 못 찾는다 */}
+                  <Link
+                    href={`/products/${detail.productId}`}
+                    className="flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border border-hairline bg-canvas px-[14px] text-[14px] font-medium text-ink"
+                  >
+                    원두 정보 · 수정
+                  </Link>
+                </div>
                 <div className="mt-1 text-[12px] text-muted-soft">
                   {fmt(detail.createdAt)} 기록
                   {fmt(detail.updatedAt) !== fmt(detail.createdAt) &&
@@ -228,13 +232,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
                 })}
               </ul>
 
-              {/* 노트가 빠졌거나 정보가 틀린 것은 원두 쪽 문제다. 그쪽에서 고친다 */}
-              <Link
-                href={`/products/${detail.productId}`}
-                className="mt-6 flex min-h-12 w-full items-center justify-center rounded-[10px] border border-hairline text-[15px] text-body"
-              >
-                원두 정보 · 사람들이 느낀 것
-              </Link>
+              <ExtraNotes notes={extra} onChange={setExtra} editable={editing} />
             </>
           )}
         </div>

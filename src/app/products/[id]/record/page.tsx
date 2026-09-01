@@ -37,6 +37,7 @@ export default async function RecordPage({ params }: PageProps<"/products/[id]/r
           createdAt: true,
           updatedAt: true,
           noteHits: { select: { sellerNoteId: true, value: true } },
+          extraNotes: { select: { raw: true, nodeId: true }, orderBy: { createdAt: "asc" } },
         },
         take: 1,
       },
@@ -94,6 +95,7 @@ export default async function RecordPage({ params }: PageProps<"/products/[id]/r
         productId={product.id}
         notes={product.sellerNotes}
         initial={initial}
+        initialExtra={experience?.extraNotes ?? []}
         hasRecord={!!experience}
       />
     </main>
