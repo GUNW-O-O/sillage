@@ -3,6 +3,8 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
+import { clickUntil, icon } from "./helpers";
+
 // 원두 상세의 스펙 수정. **브라우저에서만 드러나는 것을 본다** —
 // 이미 고른 나라 · 가공 · 품종이 수정 화면에서 통째로 사라져 보였던 버그가 여기 있었다.
 // 서버 쪽은 멀쩡했고(parseAttributes 가 id 를 다 넘겼다) LookupPicker 가 그 id 의
@@ -15,14 +17,8 @@ const prisma = new PrismaClient({
 
 test.afterAll(() => prisma.$disconnect());
 
-/// 하이드레이션 전에 누르면 onClick 이 아직 안 붙어 클릭이 그냥 삼켜진다.
-/// Playwright 는 요소가 보이면 바로 누르므로 **눌린 결과가 나올 때까지 다시 누른다.**
-/// networkidle 은 못 쓴다 — dev 서버는 HMR 웹소켓이 계속 열려 있어 idle 이 안 온다
 async function toggle(page: import("@playwright/test").Page, from: string, to: string) {
-  await expect(async () => {
-    await page.getByRole("button", { name: from }).click();
-    await expect(page.getByRole("button", { name: to })).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 15_000 });
+  await clickUntil(icon(page, from), icon(page, to));
 }
 
 test("스펙 수정을 열면 이미 고른 나라 · 가공 · 품종이 보인다", async ({ page }) => {
