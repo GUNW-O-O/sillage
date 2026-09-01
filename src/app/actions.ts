@@ -437,9 +437,15 @@ async function recomputeHash(
   return { ok: true };
 }
 
+/// 미매핑 raw 의 출처. 붙이는 것은 같지만 **지우는 규칙이 다르다** —
+/// 판매자 노트는 동일성 키의 절반이라 마지막 하나를 못 지우고 해시가 재계산되지만,
+/// 내가 느낀 향은 키 밖이라 제약이 없다
+export type NoteSource = "SELLER" | "EXTRA";
+
 export type UnmappedNote = {
   id: string;
   raw: string;
+  source: NoteSource;
   productId: string;
   productName: string;
   vendorName: string;
@@ -451,29 +457,65 @@ export type UnmappedNote = {
 /// 등록 폼에서 노트 분류를 뺐으므로 여기가 없으면 noteSetHash 가 전부
 /// unmapped 토큰으로 남아 동일성 키가 무의미해진다.
 export async function listUnmappedNotes(): Promise<UnmappedNote[]> {
-  const rows = await prisma.sellerNote.findMany({
-    where: { nodeId: null },
-    select: {
-      id: true,
-      raw: true,
-      productId: true,
-      product: { select: { name: true, vendor: { select: { name: true } } } },
-    },
-    orderBy: { addedAt: "asc" },
-    take: 200,
-  });
+  // 판매자 노트와 내가 느낀 향을 **한 큐에서** 본다. NoteAlias 는 표현→노드 사전이고
+  // 표현이 같으면 노드도 같아야 한다 — 큐를 나누면 같은 raw 를 두 번 판단하게 되고
+  // 사전이 갈릴 수 있다
+  const [sellerRows, extraRows] = await Promise.all([
+    prisma.sellerNote.findMany({
+      where: { nodeId: null },
+      select: {
+        id: true,
+        raw: true,
+        productId: true,
+        product: { select: { name: true, vendor: { select: { name: true } } } },
+      },
+      orderBy: { addedAt: "asc" },
+      take: 200,
+    }),
+    prisma.extraNote.findMany({
+      where: { nodeId: null },
+      select: {
+        id: true,
+        raw: true,
+        experience: {
+          select: {
+            productId: true,
+            product: { select: { name: true, vendor: { select: { name: true } } } },
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 200,
+    }),
+  ]);
 
+  const rows: UnmappedNote[] = [
+    ...sellerRows.map((r) => ({
+      id: r.id,
+      raw: r.raw,
+      source: "SELLER" as const,
+      productId: r.productId,
+      productName: r.product.name,
+      vendorName: r.product.vendor.name,
+      sameRawCount: 0,
+    })),
+    ...extraRows.map((r) => ({
+      id: r.id,
+      raw: r.raw,
+      source: "EXTRA" as const,
+      productId: r.experience.productId,
+      productName: r.experience.product.name,
+      vendorName: r.experience.product.vendor.name,
+      sameRawCount: 0,
+    })),
+  ];
+
+  // 출처를 가리지 않고 센다. 붙일 가치는 그 표현이 몇 번 나왔느냐로 판단한다
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.raw, (counts.get(r.raw) ?? 0) + 1);
+  for (const r of rows) r.sameRawCount = counts.get(r.raw) ?? 1;
 
-  return rows.map((r) => ({
-    id: r.id,
-    raw: r.raw,
-    productId: r.productId,
-    productName: r.product.name,
-    vendorName: r.product.vendor.name,
-    sameRawCount: counts.get(r.raw) ?? 1,
-  }));
+  return rows;
 }
 
 export type AdminResult = { ok: true } | { ok: false; message: string };
@@ -506,6 +548,10 @@ export async function attachNote(raw: string, nodeId: string): Promise<AdminResu
     });
     await tx.sellerNote.updateMany({ where: { id: { in: targets.map((t) => t.id) } }, data: { nodeId } });
 
+    // 같은 표현의 `내가 느낀 향` 도 함께 붙는다. 사전이 하나이므로 결과도 하나여야 한다.
+    // **해시 재계산은 하지 않는다** — ExtraNote 는 동일성 키 밖이라 붙여도 키가 안 움직인다
+    await tx.extraNote.updateMany({ where: { nodeId: null, raw }, data: { nodeId } });
+
     for (const productId of new Set(targets.map((t) => t.productId))) {
       const r = await recomputeHash(tx, productId);
       if (!r.ok) {
@@ -535,6 +581,16 @@ export async function deleteNote(sellerNoteId: string): Promise<AdminResult> {
     if (!r.ok) throw new Error(`지우면 「${r.conflictName}」 과 같은 원두가 된다. 병합이 먼저다`);
     return { ok: true as const };
   }).catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 내가 느낀 향을 큐에서 지운다. 판매자 노트와 달리 제약이 없다 —
+/// 동일성 키 밖이라 해시가 안 움직이고, 마지막 하나를 지켜야 할 이유도 없다
+/// (판매자 노트가 0개면 대조할 주장이 없어지지만, 이건 부가 항목이다).
+export async function deleteExtraNote(extraNoteId: string): Promise<AdminResult> {
+  // `deleteNote` 와 마찬가지로 revalidatePath 를 안 부른다 — 이 항목은 목록 화면에
+  // 안 나오고, 큐 화면은 스스로 router.refresh() 한다
+  await prisma.extraNote.delete({ where: { id: extraNoteId } });
+  return { ok: true };
 }
 
 export async function listFlavorTree() {

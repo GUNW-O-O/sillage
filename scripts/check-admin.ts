@@ -11,6 +11,11 @@ import {
 import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
+import {
+  attachNote,
+  deleteExtraNote,
+  listUnmappedNotes,
+} from "../src/app/actions";
 import { computeNoteSetHash } from "../src/lib/note-set-hash";
 import { normalizeName } from "../src/lib/normalize";
 
@@ -30,7 +35,7 @@ const TAG = "[어드민검증]";
 async function cleanup() {
   await prisma.experience.deleteMany({ where: { product: { name: { startsWith: TAG } } } });
   await prisma.product.deleteMany({ where: { name: { startsWith: TAG } } });
-  await prisma.noteAlias.deleteMany({ where: { raw: { in: ["누룩", "클린컵"] } } });
+  await prisma.noteAlias.deleteMany({ where: { raw: { in: ["누룩", "클린컵", "젖은판지"] } } });
 }
 
 async function main() {
@@ -269,6 +274,78 @@ async function main() {
     where: { id: target.id },
     data: { aliases: absorbed.aliases.filter((a) => a !== dupName) },
   });
+
+  // ── 미매핑 큐가 `내가 느낀 향` 도 훑는가.
+  // 안 훑으면 축이 없는 채로 쌓이기만 해서 집계에 영영 안 들어간다 —
+  // 판매자 노트의 미매핑과 같은 문제다 (설계 3-2)
+  const qProduct = await prisma.product.create({
+    data: {
+      vendorId: (await prisma.vendor.findFirstOrThrow({ select: { id: true } })).id,
+      category: Category.COFFEE,
+      name: `${TAG} 큐`,
+      normalizedName: normalizeName(`${TAG} 큐`),
+      noteSetHash: computeNoteSetHash([{ raw: "젖은판지", nodeId: null }]),
+      sellerNotes: { create: [{ raw: "젖은판지", nodeId: null, position: 0 }] },
+    },
+    select: { id: true, noteSetHash: true },
+  });
+  const qExp = await prisma.experience.create({
+    data: {
+      userId: USER,
+      productId: qProduct.id,
+      method: BrewMethod.HAND_DRIP,
+      phase: Phase.OVERALL,
+      // 판매자 노트와 **같은 표현**이다. 사전이 하나여야 하므로 한 줄로 묶여야 한다
+      extraNotes: { create: [{ raw: "젖은판지", nodeId: null }] },
+    },
+    select: { id: true },
+  });
+
+  const queue = await listUnmappedNotes();
+  const mine = queue.filter((n) => n.raw === "젖은판지");
+  ok(mine.length === 2, `미매핑 큐가 판매자 노트와 내 기록을 함께 싣는다 (${mine.length}건)`);
+  ok(
+    mine.some((n) => n.source === "SELLER") && mine.some((n) => n.source === "EXTRA"),
+    "출처가 구분된다",
+  );
+  ok(
+    mine.every((n) => n.sameRawCount === 2),
+    "같은 표현 개수는 출처를 가리지 않고 센다",
+  );
+
+  const attached = await attachNote("젖은판지", "other_fruit");
+  ok(attached.ok, "붙이기가 성공한다");
+  ok(
+    (await prisma.extraNote.findFirstOrThrow({ where: { experienceId: qExp.id } })).nodeId ===
+      "other_fruit",
+    "판매자 노트를 붙이면 같은 표현의 내 기록도 함께 붙는다",
+  );
+  ok(
+    (await listUnmappedNotes()).every((n) => n.raw !== "젖은판지"),
+    "붙인 표현은 큐에서 사라진다",
+  );
+
+  // ExtraNote 는 동일성 키 밖이다. 붙여도 해시가 움직이면 안 된다 —
+  // 움직이면 다른 원두와 키가 충돌할 수 있고 그건 판매자 노트에만 있어야 할 위험이다
+  const qAfter = await prisma.product.findUniqueOrThrow({
+    where: { id: qProduct.id },
+    select: { noteSetHash: true },
+  });
+  ok(
+    qAfter.noteSetHash !== qProduct.noteSetHash,
+    "판매자 노트를 붙이면 noteSetHash 가 재계산된다",
+  );
+  const beforeDelete = qAfter.noteSetHash;
+  await deleteExtraNote(
+    (await prisma.extraNote.findFirstOrThrow({ where: { experienceId: qExp.id } })).id,
+  );
+  ok(
+    (await prisma.product.findUniqueOrThrow({
+      where: { id: qProduct.id },
+      select: { noteSetHash: true },
+    })).noteSetHash === beforeDelete,
+    "내 기록의 향을 지워도 noteSetHash 는 안 움직인다",
+  );
 
   await cleanup();
   if (failed > 0) {

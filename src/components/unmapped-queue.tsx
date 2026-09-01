@@ -3,7 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { attachNote, createNodeAndAttach, deleteNote, type UnmappedNote } from "@/app/actions";
+import {
+  attachNote,
+  createNodeAndAttach,
+  deleteExtraNote,
+  deleteNote,
+  type UnmappedNote,
+} from "@/app/actions";
 
 import { Modal } from "./modal";
 
@@ -11,6 +17,10 @@ type Tree = { id: string; labelKo: string; children: { id: string; labelKo: stri
 
 // 미매핑 raw 큐 — 어드민의 주 작업 화면이다 (설계 7-4).
 // 같은 raw 는 한 줄로 묶는다. 모아 보는 편이 판단이 정확하다는 것이 이 큐의 전제다.
+//
+// 판매자 노트와 `내가 느낀 향` 이 같은 줄에 섞인다. 붙이는 것은 표현 단위라 출처가
+// 무관하고, 큐를 나누면 같은 raw 를 두 번 판단하게 되어 사전이 갈릴 수 있다.
+// **지우는 것만 갈린다** — 판매자 노트는 동일성 키의 절반이라 제약이 붙는다.
 export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tree }) {
   const router = useRouter();
   const [target, setTarget] = useState<{ raw: string; items: UnmappedNote[] } | null>(null);
@@ -69,8 +79,13 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
               </td>
               <td className="py-3 pr-4 text-[13px] text-muted">
                 {items.slice(0, 3).map((i) => (
-                  <div key={i.id}>
+                  <div key={`${i.source}:${i.id}`}>
                     {i.vendorName} · {i.productName}
+                    {/* 출처가 보여야 한다. 판매자의 주장인지 내가 느낀 것인지에 따라
+                        붙였을 때 무엇이 움직이는지가 다르다 */}
+                    {i.source === "EXTRA" && (
+                      <span className="ml-1 text-[11px] text-muted-soft">내 기록</span>
+                    )}
                   </div>
                 ))}
                 {items.length > 3 && <div>외 {items.length - 3}곳</div>}
@@ -92,7 +107,12 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
                       if (!confirm(`“${raw}” 를 ${items.length}곳에서 지운다. 되돌릴 수 없다.`)) return;
                       run(async () => {
                         for (const i of items) {
-                          const r = await deleteNote(i.id);
+                          // 판매자 노트는 마지막 하나를 못 지우고 지우면 해시가 재계산된다.
+                          // 내가 느낀 향은 동일성 키 밖이라 그냥 지운다
+                          const r =
+                            i.source === "SELLER"
+                              ? await deleteNote(i.id)
+                              : await deleteExtraNote(i.id);
                           if (!r.ok) return r;
                         }
                         return { ok: true };
