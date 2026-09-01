@@ -113,31 +113,33 @@ export function ProductNotesEditor({
             key={n.id}
             className={`rounded-[10px] bg-surface-raised px-4 py-3 ${editing ? "" : "min-w-[104px]"}`}
           >
-            <div
-              className={`flex items-baseline gap-3 ${editing ? "justify-between" : "flex-col gap-0"}`}
-            >
-              <span className="min-w-0">
-                <span className="text-[16px] font-medium text-ink">{n.raw}</span>
+            <div className={editing ? "flex items-baseline justify-between gap-3" : ""}>
+              <span className="min-w-0 text-[16px] font-medium text-ink">
+                {n.raw}
                 {n.nodeLabel ? (
-                  <span className="ml-2 text-[12px] text-muted">{n.nodeLabel}</span>
+                  <span className="ml-2 text-[12px] font-normal text-muted">{n.nodeLabel}</span>
                 ) : (
-                  <span className="ml-2 text-[12px] text-pending">미분류</span>
+                  <span className="ml-2 text-[12px] font-normal text-pending">미분류</span>
                 )}
               </span>
-              {sampleSize > 0 && (
+              {editing && sampleSize > 0 && (
                 <span className="tabular shrink-0 text-[13px] text-muted">
                   <span className="text-accent">{n.hitCount}</span> / {sampleSize}
                 </span>
               )}
             </div>
 
-            {/* 표본이 1이면 분포가 아니라 그 한 사람의 판정이다. `1 / 1` 로는
-                `모르겠음` 과 `못 느낌` 이 구분되지 않아 네 값 중 무엇이었는지를 적는다 */}
-            {sampleSize === 1 && (
-              <div className="mt-1 text-[12px] text-muted">{soleVerdict(n.counts)}</div>
+            {/* 표본이 1이면 `1 / 1` 을 따로 적지 않는다. 분모가 1이면 비율이 정보가 아니고,
+                `1 / 1` 로는 `모르겠음` 과 `못 느낌` 도 구분되지 않는다 — 그 한 사람의
+                판정을 그대로 적는 것이 같은 자리에 더 많은 것을 담는다 */}
+            {!editing && sampleSize === 1 && (
+              <div className="text-[12px] text-muted">{soleVerdict(n.counts)}</div>
             )}
-            {sampleSize > 1 && (
-              <div className="mt-1.5 flex flex-wrap gap-x-2 text-[12px] text-muted">
+            {!editing && sampleSize > 1 && (
+              <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted">
+                <span className="tabular">
+                  <span className="text-accent">{n.hitCount}</span> / {sampleSize}
+                </span>
                 <span>강함 {n.counts.STRONG}</span>
                 <span>약함 {n.counts.WEAK}</span>
                 <span>모르겠음 {n.counts.UNSURE}</span>

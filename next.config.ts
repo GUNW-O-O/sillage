@@ -13,6 +13,10 @@ const devOrigins = (process.env.DEV_ORIGINS ?? "")
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // next dev 가 에이전트를 감지하면 AGENTS.md · CLAUDE.md 를 만들고, 지워도 다시 만든다.
+  // 이 레포는 작업 규칙을 .claude.local.md 에 두고 그것을 gitignore 한다 —
+  // 퍼블릭 레포라 에이전트 설정을 커밋하지 않는다. 생성 자체를 끈다
+  agentRules: false,
   allowedDevOrigins: [
     "183.102.*.*",
     "192.168.*.*",
