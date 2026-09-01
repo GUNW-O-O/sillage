@@ -36,6 +36,20 @@ export function ProductForm({
   // 필수 셋을 넘기면 바로 저장할 수 있다. 나머지는 전부 선택이다 (설계 7-1)
   const ready = name.trim().length > 0 && notes.length > 0;
 
+  // 이 화면이 시트가 아니라 라우트인 이유가 **타이핑이 길어 잃으면 손해가 크다**는 것이다.
+  // 그러니 취소도 한 탭에 버리게 두지 않는다. 아무것도 안 친 상태면 묻지 않는다 —
+  // 잘못 들어온 것을 나가는 데 확인을 요구하면 그것대로 방해다
+  const dirty =
+    name.trim() !== initialName.trim() ||
+    notes.length > 0 ||
+    JSON.stringify(pruneAttributes(attrs)) !== JSON.stringify(pruneAttributes(EMPTY_COFFEE_ATTRIBUTES));
+
+  const cancel = () => {
+    if (dirty && !confirm("입력한 것을 버리고 나간다.")) return;
+    // 여기까지 온 경로는 시트였고 그 상태는 이미 사라졌다. 목록이 정직한 도착지다
+    router.push("/");
+  };
+
   const submit = () =>
     startTransition(async () => {
       setError(null);
@@ -57,7 +71,7 @@ export function ProductForm({
     });
 
   return (
-    <div className="pb-32">
+    <div className="pb-40">
       <div className="mb-3 flex min-h-14 items-center rounded-[10px] bg-surface-card px-4">
         <span>
           <span className="block text-[12px] text-muted">로스터리</span>
@@ -115,14 +129,26 @@ export function ProductForm({
 
       <div className="fixed inset-x-0 bottom-0 border-t border-hairline bg-surface-raised">
         <div className="mx-auto w-full max-w-[560px] px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
-          <button
-            type="button"
-            disabled={!ready || pending}
-            onClick={submit}
-            className="h-12 w-full rounded-[10px] bg-cta text-[16px] font-semibold text-on-cta active:bg-cta-pressed disabled:bg-cta-disabled"
-          >
-            {pending ? "저장 중" : "등록하고 기록하기"}
-          </button>
+          {/* 한 행. 취소를 CTA 아래에 쌓으면 바가 높아져 폼이 그만큼 가린다.
+              폭으로 위계를 준다 — 취소는 필요한 만큼만, 저장이 나머지를 다 쓴다 */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={cancel}
+              className="h-12 shrink-0 rounded-[10px] border border-hairline bg-canvas px-5 text-[15px] text-ink"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={!ready || pending}
+              onClick={submit}
+              className="h-12 flex-1 rounded-[10px] bg-cta text-[16px] font-semibold text-on-cta active:bg-cta-pressed disabled:bg-cta-disabled"
+            >
+              {pending ? "저장 중" : "등록하고 기록하기"}
+            </button>
+          </div>
           {!ready && (
             <p className="mt-2 text-center text-[12px] text-muted">
               제품명과 노트 1개만 있으면 저장된다

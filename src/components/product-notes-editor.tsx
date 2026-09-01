@@ -11,6 +11,7 @@ import {
   type NoteDistribution,
 } from "@/app/actions";
 
+import { Check, Pencil } from "./icons";
 import { NoteChips } from "./note-input";
 
 // Product 수정은 누구나 한다. 읽는 쪽이 sellerNotes 기준으로 렌더하고 noteHits 가
@@ -68,9 +69,11 @@ export function ProductNotesEditor({
             setAdding([]);
             setError(null);
           }}
-          className="flex h-11 items-center px-2 text-[14px] text-muted"
+          aria-label={editing ? "수정 완료" : "노트 수정"}
+          className="-mr-2 flex h-11 w-11 items-center justify-center text-muted"
         >
-          {editing ? "완료" : "수정"}
+          {/* 여기서는 조작마다 바로 저장된다. 나가는 것은 되돌리기가 아니라 완료다 */}
+          {editing ? <Check /> : <Pencil />}
         </button>
       </div>
 
