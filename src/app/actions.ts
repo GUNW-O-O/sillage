@@ -194,6 +194,18 @@ export type LookupOption = { id: string; nameKo: string; status: LookupStatus };
 
 /// sortWeight 가 큰 것부터. 커피 산지를 목록 위로 올리는 자리다 (설계 4-8).
 
+/// 이미 고른 lookup 의 이름을 id 로 되읽는다.
+///
+/// 수정 화면은 선택된 id 를 들고 시작하는데 `searchLookups` 로는 그 이름을 못 얻는다 —
+/// 질의가 비면 상위 60개만 오고 거기 없으면 화면에서 통째로 사라진 것처럼 보인다.
+export async function getLookupsByIds(ids: string[]): Promise<LookupOption[]> {
+  if (ids.length === 0) return [];
+  return prisma.lookupValue.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, nameKo: true, status: true },
+  });
+}
+
 export async function searchLookups(
   kind: "COUNTRY" | "VARIETY" | "PROCESS",
   query: string,

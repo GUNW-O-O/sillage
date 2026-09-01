@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
-import { createLookup, searchLookups, type LookupOption } from "@/app/actions";
+import {
+  createLookup,
+  getLookupsByIds,
+  searchLookups,
+  type LookupOption,
+} from "@/app/actions";
 
 // lookup 에 값이 없다는 이유로 기록이 막히면 안 된다 (설계 4-8).
 // country 만 닫힌 집합이라 추가를 막는다.
@@ -21,8 +26,30 @@ export function LookupPicker({
 }) {
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<LookupOption[]>([]);
+  // 이름을 아는 lookup. 이번 화면에서 고른 것과, 들어올 때 이미 선택돼 있던 것
   const [chosen, setChosen] = useState<LookupOption[]>([]);
   const [pending, startTransition] = useTransition();
+
+  // 수정 화면은 selected 에 id 를 들고 시작한다. 이름을 모르면 선택 칩이 안 그려지고
+  // visible 이 selected 를 걸러내므로 후보 목록에서도 빠져 **통째로 사라진 것처럼 보인다.**
+  // 등록 폼에서만 쓰던 때는 selected 가 늘 비어 있어 안 드러났다.
+  //
+  // 한 번 물어본 id 는 ref 로 기억한다. 지워진 lookup 을 가리키는 id 는 응답이 비어
+  // 영영 안 채워지는데, 그것을 상태로 판단하면 요청이 무한히 돈다
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    const missing = selected.filter((id) => !asked.current.has(id));
+    if (missing.length === 0) return;
+    for (const id of missing) asked.current.add(id);
+    let cancelled = false;
+    getLookupsByIds(missing).then((rows) => {
+      if (cancelled || rows.length === 0) return;
+      setChosen((c) => [...c, ...rows.filter((r) => !c.some((x) => x.id === r.id))]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   useEffect(() => {
     let cancelled = false;
