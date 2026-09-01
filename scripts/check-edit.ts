@@ -5,6 +5,7 @@ import { BrewMethod, Category, NoteHitValue, Phase, PrismaClient } from "@prisma
 import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
+import { getLookupsByIds, getProductDetail } from "../src/app/actions";
 import { computeNoteSetHash } from "../src/lib/note-set-hash";
 import { normalizeName } from "../src/lib/normalize";
 
@@ -208,6 +209,48 @@ async function main() {
       NoteHitValue.STRONG,
     "스펙을 고쳐도 판정 값이 그대로다",
   );
+
+  // ── 수정 화면이 이미 고른 lookup 의 이름을 되읽는가.
+  // LookupPicker 는 이번 화면에서 고른 것만 이름을 알았다. 수정은 selected 에 id 를 들고
+  // 시작하는데 이름을 모르면 선택 칩이 안 그려지고, 후보 목록에서도 selected 가 걸러져
+  // **통째로 사라진 것처럼 보인다.** 등록 폼에서만 쓰던 때는 안 드러났다
+  const someLookup = await prisma.lookupValue.findFirstOrThrow({
+    where: { kind: "VARIETY" },
+    select: { id: true, nameKo: true },
+  });
+  const resolved = await getLookupsByIds([someLookup.id]);
+  ok(
+    resolved[0]?.nameKo === someLookup.nameKo,
+    "고른 lookup 의 이름을 id 로 되읽는다 (수정 화면의 선택 칩)",
+  );
+  ok((await getLookupsByIds([])).length === 0, "빈 목록은 조회하지 않는다");
+
+  // ── 사람들이 느낀 향이 원두 상세에 집계되는가
+  const exp2 = await prisma.experience.findFirstOrThrow({
+    where: { userId: USER, productId: product.id },
+    select: { id: true },
+  });
+  await prisma.extraNote.createMany({
+    data: [
+      { experienceId: exp2.id, raw: "홍차", nodeId: "black_tea" },
+      // 같은 사람이 같은 표현을 두 번 적어도 한 번으로 센다
+      { experienceId: exp2.id, raw: "홍차", nodeId: "black_tea" },
+      { experienceId: exp2.id, raw: "젖은 종이", nodeId: null },
+    ],
+  });
+  const detail = await getProductDetail(product.id);
+  const agg = detail!.peopleExtraNotes;
+  ok(agg.length === 2, `사람들이 느낀 향이 표현 단위로 묶인다 (${agg.length}종)`);
+  ok(
+    agg.find((a) => a.raw === "홍차")?.count === 1,
+    "같은 사람이 두 번 적어도 한 명으로 센다",
+  );
+  ok(agg.find((a) => a.raw === "홍차")?.nodeLabel === "홍차", "붙은 축의 라벨이 따라온다");
+  ok(
+    agg.find((a) => a.raw === "젖은 종이")?.nodeId === null,
+    "축이 안 붙은 것도 표시된다",
+  );
+  ok(agg[0].count >= agg[agg.length - 1].count, "많이 나온 표현이 앞에 온다");
 
   await cleanup();
   if (failed > 0) {

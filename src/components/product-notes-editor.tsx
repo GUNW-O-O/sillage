@@ -9,6 +9,7 @@ import {
   updateProductName,
   updateSellerNote,
   type NoteDistribution,
+  type ProductDetail,
 } from "@/app/actions";
 
 import { Check, Pencil } from "./icons";
@@ -17,16 +18,28 @@ import { NoteChips } from "./note-input";
 // Product 수정은 누구나 한다. 읽는 쪽이 sellerNotes 기준으로 렌더하고 noteHits 가
 // 없으면 MISS 로 채우므로 노트가 늘어도 기존 기록이 안 깨진다 — 다음에 그 기록을
 // 여는 순간 새 노트가 `못 느낌` 으로 나타난다. 위험한 것은 삭제뿐이라 거기만 막는다.
+const VERDICT = { STRONG: "강함", WEAK: "약함", UNSURE: "모르겠음", MISS: "못 느낌" } as const;
+
+/// 표본 1일 때 그 한 사람이 무엇을 골랐나
+function soleVerdict(counts: NoteDistribution["counts"]): string {
+  for (const k of ["STRONG", "WEAK", "UNSURE", "MISS"] as const) {
+    if (counts[k] > 0) return VERDICT[k];
+  }
+  return VERDICT.MISS;
+}
+
 export function ProductNotesEditor({
   productId,
   name,
   notes,
   sampleSize,
+  peopleExtraNotes,
 }: {
   productId: string;
   name: string;
   notes: NoteDistribution[];
   sampleSize: number;
+  peopleExtraNotes: ProductDetail["peopleExtraNotes"];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -91,10 +104,18 @@ export function ProductNotesEditor({
         </p>
       )}
 
-      <ul className="mt-4 space-y-2">
+      {/* 읽을 때는 줄바꿈으로 흘린다. 노트 하나가 한 행을 다 쓰면 6개짜리 원두에서
+          아래 내용이 화면 밖으로 밀린다.
+          **수정할 때는 행으로 되돌린다** — 인라인 입력과 지우기 버튼이 폭을 요구한다 */}
+      <ul className={editing ? "mt-4 space-y-2" : "mt-4 flex flex-wrap gap-2"}>
         {notes.map((n) => (
-          <li key={n.id} className="rounded-[10px] bg-surface-raised px-4 py-3">
-            <div className="flex items-baseline justify-between gap-3">
+          <li
+            key={n.id}
+            className={`rounded-[10px] bg-surface-raised px-4 py-3 ${editing ? "" : "min-w-[104px]"}`}
+          >
+            <div
+              className={`flex items-baseline gap-3 ${editing ? "justify-between" : "flex-col gap-0"}`}
+            >
               <span className="min-w-0">
                 <span className="text-[16px] font-medium text-ink">{n.raw}</span>
                 {n.nodeLabel ? (
@@ -110,8 +131,13 @@ export function ProductNotesEditor({
               )}
             </div>
 
-            {sampleSize > 0 && (
-              <div className="mt-1.5 flex gap-2 text-[12px] text-muted">
+            {/* 표본이 1이면 분포가 아니라 그 한 사람의 판정이다. `1 / 1` 로는
+                `모르겠음` 과 `못 느낌` 이 구분되지 않아 네 값 중 무엇이었는지를 적는다 */}
+            {sampleSize === 1 && (
+              <div className="mt-1 text-[12px] text-muted">{soleVerdict(n.counts)}</div>
+            )}
+            {sampleSize > 1 && (
+              <div className="mt-1.5 flex flex-wrap gap-x-2 text-[12px] text-muted">
                 <span>강함 {n.counts.STRONG}</span>
                 <span>약함 {n.counts.WEAK}</span>
                 <span>모르겠음 {n.counts.UNSURE}</span>
@@ -146,6 +172,37 @@ export function ProductNotesEditor({
           </li>
         ))}
       </ul>
+
+      {/* 판매자가 안 적었는데 사람들이 느낀 향 (ExtraNote).
+          판매자 노트 아래에 둔다 — 이 원두에 대한 주장이 먼저고 그에 없던 것이 다음이다.
+          **여기서는 못 고친다.** 남의 기록이고, 내 것은 내 기록 화면에서 고친다 */}
+      {peopleExtraNotes.length > 0 && (
+        <section className="mt-8">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-[16px] font-semibold text-ink">사람들이 느낀 향</h2>
+            <span className="text-[12px] text-muted">판매자 노트에 없던 것</span>
+          </div>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {peopleExtraNotes.map((n) => (
+              <li
+                key={n.raw}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-surface-card px-[14px] text-[14px]"
+              >
+                <span className="font-medium text-ink">{n.raw}</span>
+                {n.nodeLabel ? (
+                  <span className="text-[12px] text-muted">{n.nodeLabel}</span>
+                ) : (
+                  <span className="text-[12px] text-pending">미분류</span>
+                )}
+                {/* 표본 수를 늘 함께 보여준다 — 비율을 단독으로 결론처럼 쓰지 않는다 (설계 7-3) */}
+                <span className="tabular text-[12px] text-muted">
+                  <span className="text-accent">{n.count}</span> / {sampleSize}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {editing && (
         <div className="mt-6 space-y-4">

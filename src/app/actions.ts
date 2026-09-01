@@ -1420,7 +1420,36 @@ export type ProductDetail = {
   /// 이 원두를 기록한 사람 수. 설계 전제 ① — 이 값은 오래도록 1에 머문다
   sampleSize: number;
   hasMyRecord: boolean;
+  /// 판매자가 안 적었는데 사람들이 느낀 향. 표현(raw) 단위로 묶는다 —
+  /// 노드로 묶으면 "열대과일 2명" 이 되어 무엇을 적었는지가 사라진다
+  peopleExtraNotes: { raw: string; nodeId: string | null; nodeLabel: string | null; count: number }[];
 };
+
+/// 사람마다 적은 향을 표현 단위로 묶는다. 같은 사람이 같은 표현을 두 번 적는 일은
+/// 저장 쪽에서 막지 않으므로 여기서 사람 단위로 한 번만 센다
+function aggregateExtraNotes(
+  experiences: {
+    userId: string;
+    extraNotes: { raw: string; nodeId: string | null; node: { labelKo: string } | null }[];
+  }[],
+): ProductDetail["peopleExtraNotes"] {
+  const byRaw = new Map<
+    string,
+    { raw: string; nodeId: string | null; nodeLabel: string | null; users: Set<string> }
+  >();
+  for (const e of experiences) {
+    for (const n of e.extraNotes) {
+      const row =
+        byRaw.get(n.raw) ??
+        { raw: n.raw, nodeId: n.nodeId, nodeLabel: n.node?.labelKo ?? null, users: new Set<string>() };
+      row.users.add(e.userId);
+      byRaw.set(n.raw, row);
+    }
+  }
+  return [...byRaw.values()]
+    .map(({ users, ...rest }) => ({ ...rest, count: users.size }))
+    .sort((a, b) => b.count - a.count || a.raw.localeCompare(b.raw, "ko"));
+}
 
 export async function getProductDetail(productId: string): Promise<ProductDetail | null> {
   const userId = currentUserId();
@@ -1442,7 +1471,14 @@ export async function getProductDetail(productId: string): Promise<ProductDetail
         },
         orderBy: { position: "asc" },
       },
-      experiences: { select: { userId: true } },
+      experiences: {
+        select: {
+          userId: true,
+          extraNotes: {
+            select: { raw: true, nodeId: true, node: { select: { labelKo: true } } },
+          },
+        },
+      },
     },
   });
   if (!product) return null;
@@ -1464,6 +1500,7 @@ export async function getProductDetail(productId: string): Promise<ProductDetail
     fields: describeProduct(product.attributes, new Map(lookups.map((l) => [l.id, l.nameKo]))),
     sampleSize: product.experiences.length,
     hasMyRecord: product.experiences.some((e) => e.userId === userId),
+    peopleExtraNotes: aggregateExtraNotes(product.experiences),
     notes: product.sellerNotes.map((n) => {
       const counts = { STRONG: 0, WEAK: 0, UNSURE: 0, MISS: 0 };
       let mine: NoteHitValueInput | null = null;

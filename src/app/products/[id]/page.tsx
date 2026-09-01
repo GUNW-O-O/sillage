@@ -42,6 +42,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[id]"
         name={product.name}
         notes={product.notes}
         sampleSize={product.sampleSize}
+        peopleExtraNotes={product.peopleExtraNotes}
       />
 
       <div className="fixed inset-x-0 bottom-0 border-t border-hairline bg-surface-raised">
