@@ -12,8 +12,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
 import {
+  addSellerNote,
   attachNote,
   deleteExtraNote,
+  deleteSellerNote,
   listUnmappedNotes,
 } from "../src/app/actions";
 import { computeNoteSetHash } from "../src/lib/note-set-hash";
@@ -346,6 +348,40 @@ async function main() {
     })).noteSetHash === beforeDelete,
     "내 기록의 향을 지워도 noteSetHash 는 안 움직인다",
   );
+
+  // ── 노트 추가 · 삭제가 어드민 전용인가.
+  // 화면에서 버튼을 뺀 것만으로는 안 막힌다 — 서버 액션은 경로만 알면 요청이 들어오는
+  // 공개 엔드포인트다. 시드 계정이 ADMIN 이라 통과하는지가 아니라, **USER 면 막히는지**를
+  // 봐야 실제로 걸려 있는 것이다. 역할을 잠깐 내렸다 되돌린다
+  try {
+    await prisma.user.update({ where: { id: USER }, data: { role: "USER" } });
+
+    const added = await addSellerNote(qProduct.id, "권한검증", null);
+    ok(!added.ok, `USER 는 노트를 추가할 수 없다 (${added.ok ? "통과해버림" : added.message})`);
+
+    const someNote = await prisma.sellerNote.findFirstOrThrow({
+      where: { productId: qProduct.id },
+      select: { id: true },
+    });
+    const removed = await deleteSellerNote(someNote.id);
+    ok(!removed.ok, "USER 는 노트를 지울 수 없다");
+
+    ok(
+      (await prisma.sellerNote.count({ where: { productId: qProduct.id, raw: "권한검증" } })) === 0,
+      "막힌 요청이 아무것도 안 남긴다",
+    );
+  } finally {
+    // 되돌리지 않으면 다른 검사와 앱 전체가 어드민을 잃는다
+    await prisma.user.update({ where: { id: USER }, data: { role: "ADMIN" } });
+  }
+
+  ok(
+    (await prisma.user.findUniqueOrThrow({ where: { id: USER }, select: { role: true } })).role ===
+      "ADMIN",
+    "검증 뒤 역할이 되돌아왔다",
+  );
+  const asAdmin = await addSellerNote(qProduct.id, "권한검증", null);
+  ok(asAdmin.ok, `ADMIN 은 노트를 추가한다 (${asAdmin.ok ? "" : asAdmin.message})`);
 
   await cleanup();
   if (failed > 0) {

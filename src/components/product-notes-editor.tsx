@@ -4,8 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import {
-  addSellerNote,
-  deleteSellerNote,
   updateProductName,
   updateSellerNote,
   type NoteDistribution,
@@ -13,11 +11,17 @@ import {
 } from "@/app/actions";
 
 import { Check, Pencil } from "./icons";
-import { NoteChips } from "./note-input";
 
-// Product 수정은 누구나 한다. 읽는 쪽이 sellerNotes 기준으로 렌더하고 noteHits 가
-// 없으면 MISS 로 채우므로 노트가 늘어도 기존 기록이 안 깨진다 — 다음에 그 기록을
-// 여는 순간 새 노트가 `못 느낌` 으로 나타난다. 위험한 것은 삭제뿐이라 거기만 막는다.
+// 여기서 고칠 수 있는 것은 **표기와 제품명**이다.
+//
+// 표기 수정은 안전하다 — nodeId 가 그대로라 동일성 키도 판정의 좌변도 안 움직인다.
+// 그래서 표기가 틀린 노트는 지우는 대신 고쳐서 쓴다 (설계 4-3 개정).
+//
+// **노트 추가 · 삭제는 어드민 몫이다** (요구 FR-9). 둘 다 noteSetHash 를 움직여
+// 다른 원두와 키가 충돌할 수 있고, 충돌하면 막히는데 그때 사용자가 할 수 있는 것이
+// 없다 (병합이 없다). 추가는 그 위에 **남이 이미 남긴 기록에 항목을 밀어넣는** 조작이다 —
+// 설계 4-3 개정이 안전하다고 한 것은 데이터가 안 깨진다는 뜻이지 남이 내 기록을
+// 늘려도 된다는 뜻이 아니었다.
 const VERDICT = { STRONG: "강함", WEAK: "약함", UNSURE: "모르겠음", MISS: "못 느낌" } as const;
 
 /// 표본 1일 때 그 한 사람이 무엇을 골랐나
@@ -44,7 +48,6 @@ export function ProductNotesEditor({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(name);
-  const [adding, setAdding] = useState<{ raw: string; nodeId: string | null }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -56,20 +59,6 @@ export function ProductNotesEditor({
       else router.refresh();
     });
 
-  const commitAdds = () =>
-    startTransition(async () => {
-      setError(null);
-      for (const n of adding) {
-        const r = await addSellerNote(productId, n.raw, n.nodeId);
-        if (!r.ok) {
-          setError(r.message);
-          return;
-        }
-      }
-      setAdding([]);
-      router.refresh();
-    });
-
   return (
     <div>
       <div className="flex items-baseline justify-between">
@@ -79,7 +68,6 @@ export function ProductNotesEditor({
           onClick={() => {
             setEditing((e) => !e);
             setDraftName(name);
-            setAdding([]);
             setError(null);
           }}
           aria-label={editing ? "수정 완료" : "노트 수정"}
@@ -147,8 +135,11 @@ export function ProductNotesEditor({
               </div>
             )}
 
+            {/* 고칠 수 있는 것은 **표기뿐**이다. nodeId 가 그대로라 동일성 키도 판정도
+                안 움직인다. 추가 · 삭제는 어드민 몫이다 (요구 FR-9) — 그쪽은 키를
+                움직이고 남의 기록에 항목을 밀어넣는 조작이다 */}
             {editing && (
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3">
                 <input
                   defaultValue={n.raw}
                   onBlur={(e) => {
@@ -156,19 +147,8 @@ export function ProductNotesEditor({
                       run(() => updateSellerNote(n.id, e.target.value, n.nodeId));
                     }
                   }}
-                  className="h-11 flex-1 rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none"
+                  className="h-11 w-full rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none"
                 />
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    if (!confirm(`“${n.raw}” 를 지운다.`)) return;
-                    run(() => deleteSellerNote(n.id));
-                  }}
-                  className="inline-flex min-h-11 items-center rounded-[10px] border border-hairline px-4 text-[14px] text-danger"
-                >
-                  지우기
-                </button>
               </div>
             )}
           </li>
@@ -208,24 +188,11 @@ export function ProductNotesEditor({
 
       {editing && (
         <div className="mt-6 space-y-4">
-          <div>
-            <div className="mb-2 text-[14px] font-medium text-muted">노트 추가</div>
-            <NoteChips notes={adding} onChange={setAdding} />
-            {adding.length > 0 && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={commitAdds}
-                className="mt-3 h-11 w-full rounded-[10px] bg-cta text-[15px] font-semibold text-on-cta"
-              >
-                {adding.length}개 추가
-              </button>
-            )}
-            <p className="mt-2 text-[12px] text-muted">
-              추가된 노트는 기존 기록에 <span className="text-ink">못 느낌</span> 으로 들어간다.
-              기록한 사람이 다음에 열 때 보인다.
-            </p>
-          </div>
+          <p className="text-[12px] text-muted">
+            표기가 틀린 노트는 고쳐서 쓴다. <span className="text-ink">노트 추가 · 삭제</span>
+            는 어드민에서 한다 — 추가한 노트는 남이 이미 남긴 기록에도{" "}
+            <span className="text-ink">못 느낌</span> 으로 들어간다.
+          </p>
 
           <div>
             <div className="mb-2 text-[14px] font-medium text-muted">제품명</div>

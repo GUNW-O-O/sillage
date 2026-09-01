@@ -14,11 +14,27 @@ import {
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db";
-import { currentUserId } from "@/lib/current-user";
+import { currentUserId, requireAdmin } from "@/lib/current-user";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
 import { normalizeName } from "@/lib/normalize";
 import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
 import { collectLookupIds, describeProduct } from "@/lib/product-display";
+
+/// 화면 갱신이 저장 결과를 뒤집으면 안 된다.
+///
+/// 여러 액션이 `.then(r => { revalidatePath(...); return r })` 로 캐시를 털고 결과를
+/// 그대로 넘기는데, 그 뒤에 `.catch` 가 달려 있다. `revalidatePath` 가 던지면
+/// **이미 커밋된 쓰기가 실패로 보고되고** 호출부는 재시도해서 "이미 있는 노트다" 를 만난다.
+/// 요청 컨텍스트 밖(검사 스크립트)에서 실제로 그렇게 났다.
+///
+/// 캐시를 못 텄으면 화면이 한 박자 늦게 갱신될 뿐이다. 삼킨다.
+function revalidate(path: string) {
+  try {
+    revalidatePath(path);
+  } catch {
+    // 요청 컨텍스트가 없다. 저장은 이미 끝났다
+  }
+}
 
 export type VendorHit = { id: string; name: string; status: VendorStatus };
 export type ProductHit = { id: string; name: string; noteCount: number; hasRecord: boolean };
@@ -400,13 +416,13 @@ export async function saveRecord(
     }
   });
 
-  revalidatePath("/");
+  revalidate("/");
   return { ok: true };
 }
 
 export async function deleteRecord(productId: string): Promise<{ ok: true }> {
   await prisma.experience.deleteMany({ where: { userId: currentUserId(), productId } });
-  revalidatePath("/");
+  revalidate("/");
   return { ok: true };
 }
 
@@ -447,6 +463,65 @@ async function recomputeHash(
 
   await tx.product.update({ where: { id: productId }, data: { noteSetHash } });
   return { ok: true };
+}
+
+export type AdminProductNote = {
+  id: string;
+  raw: string;
+  nodeId: string | null;
+  nodeLabel: string | null;
+  /// 이 노트에 붙은 판정 수. 0 이 아니면 지울 수 없다
+  hitCount: number;
+};
+
+export type AdminProduct = {
+  id: string;
+  name: string;
+  vendorName: string;
+  sampleSize: number;
+  notes: AdminProductNote[];
+};
+
+/// 어드민의 Product 노트 편집 화면이 쓴다 (요구 FR-9 — 잘못 지운 것 복구 · 빠뜨린 노트 보강).
+///
+/// `getProductDetail` 을 안 쓴다. 저쪽은 판정 분포를 사람에게 보여주는 것이 목적이라
+/// 여기서 필요 없는 집계를 다 돌린다. 여기서 필요한 것은 **지울 수 있는가**뿐이다.
+export async function getAdminProduct(productId: string): Promise<AdminProduct | null> {
+  await requireAdmin();
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true,
+      name: true,
+      vendor: { select: { name: true } },
+      _count: { select: { experiences: true } },
+      sellerNotes: {
+        select: {
+          id: true,
+          raw: true,
+          nodeId: true,
+          node: { select: { labelKo: true } },
+          _count: { select: { noteHits: true } },
+        },
+        orderBy: { position: "asc" },
+      },
+    },
+  });
+  if (!p) return null;
+
+  return {
+    id: p.id,
+    name: p.name,
+    vendorName: p.vendor.name,
+    sampleSize: p._count.experiences,
+    notes: p.sellerNotes.map((n) => ({
+      id: n.id,
+      raw: n.raw,
+      nodeId: n.nodeId,
+      nodeLabel: n.node?.labelKo ?? null,
+      hitCount: n._count.noteHits,
+    })),
+  };
 }
 
 /// 미매핑 raw 의 출처. 붙이는 것은 같지만 **지우는 규칙이 다르다** —
@@ -653,13 +728,13 @@ export async function listPending() {
 
 export async function approveVendor(id: string): Promise<AdminResult> {
   await prisma.vendor.update({ where: { id }, data: { status: VendorStatus.APPROVED } });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
 export async function approveLookup(id: string): Promise<AdminResult> {
   await prisma.lookupValue.update({ where: { id }, data: { status: LookupStatus.APPROVED } });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -715,7 +790,7 @@ export async function mergeLookup(sourceId: string, targetId: string): Promise<A
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/admin");
+      revalidate("/admin");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -738,7 +813,7 @@ export async function approveLookupWith(id: string, aliases: string[]): Promise<
     where: { id },
     data: { status: LookupStatus.APPROVED, ...(clean.length ? { aliases: clean } : {}) },
   });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -748,7 +823,7 @@ export async function approveVendorWith(id: string, aliases: string[]): Promise<
     where: { id },
     data: { status: VendorStatus.APPROVED, ...(clean.length ? { aliases: clean } : {}) },
   });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -796,7 +871,7 @@ export async function mergeVendor(sourceId: string, targetId: string): Promise<A
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/admin");
+      revalidate("/admin");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -849,7 +924,7 @@ export async function createFlavorNodeL2(
   await prisma.flavorNode.create({
     data: { id, level: 2, parentId, labelKo: ko, labelEn: en },
   });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -882,7 +957,7 @@ export async function createLookupApproved(
       createdById: currentUserId(),
     },
   });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -910,7 +985,7 @@ export async function createVendorApproved(
       createdById: currentUserId(),
     },
   });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -996,7 +1071,7 @@ export async function approveLookupEdited(
       status: LookupStatus.APPROVED,
     },
   });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -1033,7 +1108,7 @@ export async function rejectLookup(id: string): Promise<AdminResult> {
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/admin");
+      revalidate("/admin");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -1047,7 +1122,7 @@ export async function rejectVendor(id: string): Promise<AdminResult> {
     return { ok: false, message: `원두 ${count}개가 붙어 있다. 흡수를 써달라` };
   }
   await prisma.vendor.delete({ where: { id } });
-  revalidatePath("/admin");
+  revalidate("/admin");
   return { ok: true };
 }
 
@@ -1208,7 +1283,7 @@ export async function remapAlias(aliasId: string, nodeId: string): Promise<Admin
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/admin");
+      revalidate("/admin");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -1243,7 +1318,7 @@ export async function unmapAlias(aliasId: string): Promise<AdminResult> {
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/admin");
+      revalidate("/admin");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -1256,11 +1331,23 @@ export async function unmapAlias(aliasId: string): Promise<AdminResult> {
 // 다음에 그 기록을 여는 순간 새 노트가 `못 느낌` 으로 나타난다.
 // 위험한 것은 삭제뿐이라 거기만 막는다.
 
+/// 노트 추가는 어드민만 한다 (요구 FR-9).
+///
+/// 사용자 화면에서 열어두면 **남의 기록에 항목을 밀어넣는 조작**이 된다 — 추가된 노트는
+/// 기존 기록에 `못 느낌` 으로 소급 반영된다. 설계 4-3 개정이 안전하다고 한 것은
+/// *데이터가 안 깨진다*는 뜻이지 *남이 내 기록을 늘려도 된다*는 뜻이 아니었다.
+/// 게다가 noteSetHash 를 움직여 다른 원두와 키가 충돌하면 막히는데, 그때 사용자가
+/// 할 수 있는 것이 없다 (병합이 없다).
 export async function addSellerNote(
   productId: string,
   raw: string,
   nodeId: string | null,
 ): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const trimmed = raw.trim();
   if (!trimmed) return { ok: false, message: "노트가 비어 있다" };
 
@@ -1286,7 +1373,7 @@ export async function addSellerNote(
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/");
+      revalidate("/");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -1317,7 +1404,7 @@ export async function updateSellerNote(
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/");
+      revalidate("/");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -1326,7 +1413,14 @@ export async function updateSellerNote(
 /// 판정이 붙은 노트는 지우지 않는다. 사용자가 실제로 찍은 판정은 사실이고,
 /// 판매자 노트가 잘못이었다는 것이 그 판정을 없앨 근거는 아니다 (설계 7-4).
 /// 표기가 틀린 것이면 수정으로 바꿔 쓴다.
+/// 삭제도 어드민만 한다. 판정이 붙었거나 마지막 하나면 여기서 또 막힌다 —
+/// 권한과 별개로 그 둘은 누가 하든 안 된다
 export async function deleteSellerNote(sellerNoteId: string): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   return prisma
     .$transaction(async (tx) => {
       const note = await tx.sellerNote.findUniqueOrThrow({
@@ -1347,7 +1441,7 @@ export async function deleteSellerNote(sellerNoteId: string): Promise<AdminResul
       return { ok: true as const };
     })
     .then((r) => {
-      revalidatePath("/");
+      revalidate("/");
       return r;
     })
     .catch((e: Error) => ({ ok: false as const, message: e.message }));
@@ -1382,7 +1476,7 @@ export async function updateProductName(productId: string, name: string): Promis
     where: { id: productId },
     data: { name: trimmed, normalizedName },
   });
-  revalidatePath("/");
+  revalidate("/");
   return { ok: true };
 }
 
@@ -1394,7 +1488,7 @@ export async function updateProductAttributes(
     where: { id: productId },
     data: { attributes: attributes as Prisma.InputJsonValue },
   });
-  revalidatePath("/");
+  revalidate("/");
   return { ok: true };
 }
 

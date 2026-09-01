@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 const NAV = [
   { href: "/admin", label: "개요", key: "unmapped" as const },
   { href: "/admin/unmapped", label: "미매핑 노트", key: "unmapped" as const },
+  { href: "/admin/products", label: "원두 노트", key: null },
   { href: "/admin/pending", label: "승인 대기", key: "pending" as const },
   { href: "/admin/flavors", label: "향 계층", key: null },
   { href: "/admin/lookups", label: "품종 · 가공", key: null },
