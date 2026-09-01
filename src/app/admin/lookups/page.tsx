@@ -4,13 +4,12 @@ import { AddLookup } from "@/components/admin-create";
 // country 는 닫힌 집합이라 추가를 막는다. 조회만 붙인다 (설계 4-8).
 export const dynamic = "force-dynamic";
 
-export default async function LookupsPage() {
-  const [varieties, processes] = await Promise.all([
-    listLookupsAdmin("VARIETY"),
-    listLookupsAdmin("PROCESS"),
-  ]);
+type LookupRow = Awaited<ReturnType<typeof listLookupsAdmin>>[number];
 
-  const Table = ({ rows }: { rows: typeof varieties }) => (
+// 렌더 안에서 정의하면 렌더마다 다른 컴포넌트가 되어 React 가 표를 통째로
+// 언마운트 · 재마운트한다. 모듈 스코프에 둔다
+function Table({ rows }: { rows: LookupRow[] }) {
+  return (
     <table className="mt-3 w-full border-collapse text-left">
       <thead>
         <tr className="border-b border-hairline text-[13px] text-muted">
@@ -38,6 +37,13 @@ export default async function LookupsPage() {
       </tbody>
     </table>
   );
+}
+
+export default async function LookupsPage() {
+  const [varieties, processes] = await Promise.all([
+    listLookupsAdmin("VARIETY"),
+    listLookupsAdmin("PROCESS"),
+  ]);
 
   return (
     <main className="max-w-[1000px]">

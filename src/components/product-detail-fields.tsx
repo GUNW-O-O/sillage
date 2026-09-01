@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
+import { revealCount } from "@/lib/detail-field-reveal";
 import { ROAST_LEVELS, type CoffeeAttributes } from "@/lib/product-attributes";
 
 import { LookupPicker } from "./lookup-picker";
@@ -63,12 +64,18 @@ function hasValue(key: FieldKey, a: CoffeeAttributes): boolean {
 export function ProductDetailFields({
   attrs,
   onChange,
+  revealAll = false,
 }: {
   attrs: CoffeeAttributes;
   onChange: (next: CoffeeAttributes) => void;
+  /// 수정 화면은 순차 노출을 쓰지 않는다. 등록은 "무엇을 물어볼지 모르는" 상태라
+  /// 하나씩 꺼내는 것이 맞지만, 수정은 **어디가 틀렸는지 알고 들어온다** —
+  /// 건너뛴 빈 칸에서 노출이 멈추면 그 칸을 영영 못 고친다
+  revealAll?: boolean;
 }) {
-  // 지금까지 꺼낸 칸 수. 채우면 하나씩 는다
-  const [revealed, setRevealed] = useState(1);
+  // 건너뛰기로 사람이 올린 하한. **자동으로 열리는 부분은 상태가 아니다** —
+  // 채워진 칸 수에서 그때그때 나오는 값이라 effect 로 밀어 올리면 렌더가 연쇄한다
+  const [floor, setFloor] = useState(1);
 
   const set = <K extends keyof CoffeeAttributes>(k: K, v: CoffeeAttributes[K]) =>
     onChange({ ...attrs, [k]: v });
@@ -79,19 +86,17 @@ export function ProductDetailFields({
     [attrs.kind],
   );
 
-  // 마지막으로 꺼낸 칸이 채워지면 다음 칸을 자동으로 연다
-  useEffect(() => {
-    const last = applicable[revealed - 1];
-    if (last && hasValue(last.key, attrs) && revealed < applicable.length) {
-      setRevealed((r) => r + 1);
-    }
-  }, [attrs, applicable, revealed]);
+  // 몇 칸을 열지는 채워진 칸에서 나온다. 규칙은 lib 에 있고 테스트가 지킨다
+  const revealed = useMemo(
+    () => revealCount(applicable.map((f) => hasValue(f.key, attrs)), floor),
+    [applicable, attrs, floor],
+  );
 
-  const shown = applicable.slice(0, revealed);
-  const remaining = applicable.length - revealed;
+  const shown = revealAll ? applicable : applicable.slice(0, revealed);
+  const remaining = revealAll ? 0 : applicable.length - revealed;
 
   // 건너뛰면 그 칸은 공란으로 남고 다음 칸이 나온다. 나중에 채우고 싶으면 그냥 채운다
-  const skip = () => setRevealed((r) => Math.min(r + 1, applicable.length));
+  const skip = () => setFloor(Math.min(revealed + 1, applicable.length));
 
   return (
     <div className="mt-4 space-y-6">
@@ -121,13 +126,16 @@ export function ProductDetailFields({
               {f.label}
               {attrs.kind === "blend" && (f.key === "country" || f.key === "process") && " (복수)"}
             </span>
-            <button
-              type="button"
-              onClick={skip}
-              className="flex h-11 items-center px-2 text-[13px] text-muted-soft"
-            >
-              건너뛰기
-            </button>
+            {/* 건너뛰기는 순차 노출의 조작이다. 전부 펼친 수정 화면에는 넘길 다음 칸이 없다 */}
+            {!revealAll && (
+              <button
+                type="button"
+                onClick={skip}
+                className="flex h-11 items-center px-2 text-[13px] text-muted-soft"
+              >
+                건너뛰기
+              </button>
+            )}
           </div>
           <FieldBody fieldKey={f.key} attrs={attrs} set={set} />
         </div>
