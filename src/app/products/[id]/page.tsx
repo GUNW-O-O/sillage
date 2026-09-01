@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getProductDetail } from "@/app/actions";
+import { getProductDetail, listProductProposals } from "@/app/actions";
+import { NoteProposals } from "@/components/note-proposals";
 import { ProductNotesEditor } from "@/components/product-notes-editor";
 import { ProductSpecEditor } from "@/components/product-spec-editor";
 
@@ -13,6 +14,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[id]"
   const { id } = await params;
   const product = await getProductDetail(id);
   if (!product) notFound();
+  const proposals = await listProductProposals(id);
 
   return (
     <main className="mx-auto w-full max-w-[560px] px-4 py-5 pb-24">
@@ -44,6 +46,8 @@ export default async function ProductPage({ params }: PageProps<"/products/[id]"
         sampleSize={product.sampleSize}
         peopleExtraNotes={product.peopleExtraNotes}
       />
+
+      <NoteProposals productId={product.id} proposals={proposals} />
 
       <div className="fixed inset-x-0 bottom-0 border-t border-hairline bg-surface-raised">
         <div className="mx-auto w-full max-w-[560px] px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))]">

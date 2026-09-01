@@ -35,6 +35,7 @@ model User {
   createdProducts Product[]
   createdAliases  NoteAlias[]
   createdLookups  LookupValue[]
+  noteProposals   SellerNoteProposal[]
 
   @@unique([provider, providerUserId])
 }
@@ -67,9 +68,10 @@ model FlavorNode {
   parent   FlavorNode?  @relation("NodeTree", fields: [parentId], references: [id])
   children FlavorNode[] @relation("NodeTree")
 
-  aliases     NoteAlias[]
-  sellerNotes SellerNote[]
-  extraNotes  ExtraNote[]
+  aliases       NoteAlias[]
+  sellerNotes   SellerNote[]
+  extraNotes    ExtraNote[]
+  noteProposals SellerNoteProposal[]
 
   @@index([level])
   @@index([parentId])
@@ -221,12 +223,45 @@ model Product {
   createdBy   User?        @relation(fields: [createdById], references: [id])
   sellerNotes SellerNote[]
   experiences Experience[]
+  noteProposals SellerNoteProposal[]
 
   /// 동일성 키 (4-3)
   @@unique([vendorId, category, normalizedName, noteSetHash])
   @@index([vendorId])
   /// 원두명 근접 검색. `contains` 는 LIKE '%q%' 라 B-tree 로는 못 좁힌다
   @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// 사용자가 낸 판매자 노트 추가 제안.
+///
+/// **SellerNote 로 바로 안 들어간다.** 노트는 Product 동일성 키의 절반이라
+/// (`noteSetHash`) 사람마다 다르게 보일 수 없다 — `pending` Vendor 처럼 "등록자에게는
+/// 즉시 보인다" 를 못 한다. 승격되는 순간에만 SellerNote 가 되고, 그 전까지는
+/// 어느 화면에도 노트로 안 나온다.
+///
+/// 승격은 어드민이 한다. 자동 승격(동의 N명)은 사람이 붙어 실제 분포를 본 뒤에 정한다 —
+/// 지금 임계값을 정하면 근거 없는 숫자다 (설계 9장이 별칭 승격 큐를 미뤄둔 것과 같은 기준).
+model SellerNoteProposal {
+  id        String @id @default(cuid())
+  productId String
+  /// 표시용 원문
+  raw String
+  /// 동의를 묶는 키. 표기가 흔들리면("자스민" · "쟈스민") 같은 제안으로 안 세어져
+  /// 동의가 영영 안 모인다
+  normalizedRaw String
+  /// 자동완성이 붙인 축. 없으면 어드민이 붙인다
+  nodeId      String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  node      FlavorNode? @relation(fields: [nodeId], references: [id])
+  createdBy User        @relation(fields: [createdById], references: [id])
+
+  /// 한 사람은 같은 원두에 같은 표현을 한 번만 낸다. **그 행 하나가 곧 동의 1이다** —
+  /// 별도의 동의 테이블을 두지 않는다
+  @@unique([productId, normalizedRaw, createdById])
+  @@index([productId])
 }
 
 /// 판매자 노트. 항목 단위 행으로 저장한다 — 배열/JSON 이면 noteHits 가 참조할 수 없다

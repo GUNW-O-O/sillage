@@ -13,6 +13,12 @@ import "dotenv/config";
 
 import {
   addSellerNote,
+  approveNoteProposal,
+  listNoteProposals,
+  listProductProposals,
+  proposeSellerNote,
+  rejectNoteProposal,
+  withdrawNoteProposal,
   attachNote,
   deleteExtraNote,
   deleteSellerNote,
@@ -382,6 +388,79 @@ async function main() {
   );
   const asAdmin = await addSellerNote(qProduct.id, "권한검증", null);
   ok(asAdmin.ok, `ADMIN 은 노트를 추가한다 (${asAdmin.ok ? "" : asAdmin.message})`);
+
+  // ── 노트 추가 제안. 사용자는 제안만 하고 노트는 어드민이 올린다.
+  // 노트는 Product 동일성 키의 절반이라 사람마다 다르게 보일 수 없다 —
+  // pending 로스터리처럼 "낸 사람에게는 즉시 보인다" 를 못 한다
+  const beforeNotes = await prisma.sellerNote.count({ where: { productId: qProduct.id } });
+
+  ok((await proposeSellerNote(qProduct.id, "제안검증", null)).ok, "노트를 제안한다");
+  ok(
+    (await prisma.sellerNote.count({ where: { productId: qProduct.id } })) === beforeNotes,
+    "제안은 노트가 되지 않는다 — 승격 전에는 어느 화면에도 안 나온다",
+  );
+
+  // 같은 사람이 두 번 눌러도 동의는 1이다. @@unique 가 막고 upsert 가 조용히 넘긴다
+  ok((await proposeSellerNote(qProduct.id, "제안검증", null)).ok, "두 번 눌러도 오류가 아니다");
+  let proposed = (await listProductProposals(qProduct.id)).find((p) => p.raw === "제안검증");
+  ok(proposed?.agreeCount === 1, `같은 사람이 두 번 내도 동의는 1이다 (${proposed?.agreeCount})`);
+  ok(proposed?.mine === true, "내가 낸 것으로 표시된다");
+
+  // 다른 사람이 같은 표현을 내면 그것이 동의 2다. 표기가 흔들려도 같은 제안으로 묶여야 한다
+  const other = await prisma.user.upsert({
+    where: { id: "check-other" },
+    update: {},
+    create: { id: "check-other", displayName: "검증용", role: "USER" },
+    select: { id: true },
+  });
+  await prisma.sellerNoteProposal.create({
+    data: {
+      productId: qProduct.id,
+      raw: "제안 검증",
+      normalizedRaw: normalizeName("제안검증"),
+      nodeId: "black_tea",
+      createdById: other.id,
+    },
+  });
+  proposed = (await listProductProposals(qProduct.id)).find((p) => p.normalizedRaw === normalizeName("제안검증"));
+  ok(proposed?.agreeCount === 2, `다른 사람이 내면 동의가 는다 (${proposed?.agreeCount})`);
+  ok(proposed?.raw === "제안검증", "표시는 먼저 낸 사람의 표기를 쓴다");
+  ok(proposed?.nodeId === "black_tea", "누구든 붙인 축이 있으면 그것을 쓴다");
+
+  const pq = await listNoteProposals();
+  const row = pq.find((p) => p.productId === qProduct.id && p.raw === "제안검증");
+  ok(!!row, "어드민 큐에 뜬다");
+  ok(row?.vendorName !== undefined && row?.productName !== undefined, "어느 원두인지 함께 온다");
+
+  // 올리면 노트가 되고 제안은 큐에서 빠진다
+  ok((await approveNoteProposal(qProduct.id, normalizeName("제안검증"))).ok, "노트로 올린다");
+  ok(
+    (await prisma.sellerNote.count({ where: { productId: qProduct.id, raw: "제안검증" } })) === 1,
+    "올린 제안이 실제 노트가 된다",
+  );
+  ok(
+    (await listProductProposals(qProduct.id)).every((p) => p.raw !== "제안검증"),
+    "올린 제안은 큐에서 사라진다",
+  );
+  ok(!(await approveNoteProposal(qProduct.id, normalizeName("제안검증"))).ok, "두 번 못 올린다");
+
+  // 거두기와 지우기
+  await proposeSellerNote(qProduct.id, "거둘것", null);
+  ok((await withdrawNoteProposal(qProduct.id, normalizeName("거둘것"))).ok, "낸 제안을 거둔다");
+  ok(
+    (await listProductProposals(qProduct.id)).every((p) => p.raw !== "거둘것"),
+    "거두면 동의가 빠진다",
+  );
+
+  await proposeSellerNote(qProduct.id, "지울것", null);
+  ok((await rejectNoteProposal(qProduct.id, normalizeName("지울것"))).ok, "어드민이 제안을 지운다");
+  ok(
+    (await listNoteProposals()).every((p) => p.raw !== "지울것"),
+    "지운 제안은 큐에서 사라진다",
+  );
+
+  await prisma.sellerNoteProposal.deleteMany({ where: { productId: qProduct.id } });
+  await prisma.user.deleteMany({ where: { id: "check-other" } });
 
   await cleanup();
   if (failed > 0) {

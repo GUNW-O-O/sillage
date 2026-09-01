@@ -465,6 +465,227 @@ async function recomputeHash(
   return { ok: true };
 }
 
+// ─────────────────────────────────────────── 노트 추가 제안 (요구 FR-9)
+
+export type NoteProposal = {
+  raw: string;
+  normalizedRaw: string;
+  nodeId: string | null;
+  nodeLabel: string | null;
+  /// 같은 표현을 낸 사람 수. **이것이 동의 수다** — 별도 동의 테이블을 두지 않는다
+  agreeCount: number;
+  /// 내가 이미 냈는가. 냈으면 다시 못 내고 철회만 된다
+  mine: boolean;
+};
+
+/// 노트를 하나 제안한다. 누구나 할 수 있다.
+///
+/// 이미 그 원두의 노트로 있으면 거절한다 — 제안할 것이 없다.
+/// 이미 내가 낸 것이면 조용히 성공으로 둔다. 두 번 눌렀을 때 오류를 띄울 이유가 없다.
+export async function proposeSellerNote(
+  productId: string,
+  raw: string,
+  nodeId: string | null,
+): Promise<AdminResult> {
+  const trimmed = raw.trim();
+  const normalizedRaw = normalizeName(trimmed);
+  if (!normalizedRaw) return { ok: false, message: "노트가 비어 있다" };
+
+  const exists = await prisma.sellerNote.findFirst({
+    where: { productId, raw: trimmed },
+    select: { id: true },
+  });
+  if (exists) return { ok: false, message: "이미 이 원두의 노트다" };
+
+  await prisma.sellerNoteProposal.upsert({
+    where: {
+      productId_normalizedRaw_createdById: {
+        productId,
+        normalizedRaw,
+        createdById: currentUserId(),
+      },
+    },
+    // 두 번째 제안은 아무것도 안 바꾼다. raw 를 덮으면 먼저 낸 사람의 표기가 바뀐다
+    update: {},
+    create: { productId, raw: trimmed, normalizedRaw, nodeId, createdById: currentUserId() },
+  });
+  revalidate("/");
+  return { ok: true };
+}
+
+/// 낸 제안을 거둔다. 동의 1이 빠진다
+export async function withdrawNoteProposal(
+  productId: string,
+  normalizedRaw: string,
+): Promise<AdminResult> {
+  await prisma.sellerNoteProposal.deleteMany({
+    where: { productId, normalizedRaw, createdById: currentUserId() },
+  });
+  revalidate("/");
+  return { ok: true };
+}
+
+/// 원두 화면이 쓴다. 표현 단위로 묶어 동의 수를 센다
+export async function listProductProposals(productId: string): Promise<NoteProposal[]> {
+  const userId = currentUserId();
+  const rows = await prisma.sellerNoteProposal.findMany({
+    where: { productId },
+    select: {
+      raw: true,
+      normalizedRaw: true,
+      nodeId: true,
+      createdById: true,
+      node: { select: { labelKo: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const byKey = new Map<string, NoteProposal>();
+  for (const r of rows) {
+    const cur = byKey.get(r.normalizedRaw);
+    if (cur) {
+      cur.agreeCount += 1;
+      cur.mine ||= r.createdById === userId;
+      // 축은 붙은 것이 하나라도 있으면 그것을 쓴다
+      if (!cur.nodeId && r.nodeId) {
+        cur.nodeId = r.nodeId;
+        cur.nodeLabel = r.node?.labelKo ?? null;
+      }
+      continue;
+    }
+    byKey.set(r.normalizedRaw, {
+      // 표시는 **먼저 낸 사람의 표기**를 쓴다. 나중 사람이 덮으면 남의 화면 글자가 바뀐다
+      raw: r.raw,
+      normalizedRaw: r.normalizedRaw,
+      nodeId: r.nodeId,
+      nodeLabel: r.node?.labelKo ?? null,
+      agreeCount: 1,
+      mine: r.createdById === userId,
+    });
+  }
+  return [...byKey.values()].sort((a, b) => b.agreeCount - a.agreeCount);
+}
+
+export type AdminNoteProposal = NoteProposal & {
+  productId: string;
+  productName: string;
+  vendorName: string;
+};
+
+/// 어드민 큐. 처리할 것이 많이 몰린 것부터 본다
+export async function listNoteProposals(): Promise<AdminNoteProposal[]> {
+  await requireAdmin();
+  const rows = await prisma.sellerNoteProposal.findMany({
+    select: {
+      raw: true,
+      normalizedRaw: true,
+      nodeId: true,
+      createdById: true,
+      productId: true,
+      node: { select: { labelKo: true } },
+      product: { select: { name: true, vendor: { select: { name: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 200,
+  });
+
+  const byKey = new Map<string, AdminNoteProposal>();
+  for (const r of rows) {
+    const key = `${r.productId}:${r.normalizedRaw}`;
+    const cur = byKey.get(key);
+    if (cur) {
+      cur.agreeCount += 1;
+      if (!cur.nodeId && r.nodeId) {
+        cur.nodeId = r.nodeId;
+        cur.nodeLabel = r.node?.labelKo ?? null;
+      }
+      continue;
+    }
+    byKey.set(key, {
+      raw: r.raw,
+      normalizedRaw: r.normalizedRaw,
+      nodeId: r.nodeId,
+      nodeLabel: r.node?.labelKo ?? null,
+      agreeCount: 1,
+      mine: false,
+      productId: r.productId,
+      productName: r.product.name,
+      vendorName: r.product.vendor.name,
+    });
+  }
+  return [...byKey.values()].sort((a, b) => b.agreeCount - a.agreeCount);
+}
+
+/// 제안을 실제 노트로 올린다. 어드민만.
+///
+/// **키 충돌로 막힐 수 있다.** 노트가 늘면 noteSetHash 가 바뀌고 그 결과가 다른 원두와
+/// 같아지면 적용이 안 된다 — 그때는 제안을 큐에 남긴다. 지우면 판단 근거가 사라진다
+export async function approveNoteProposal(
+  productId: string,
+  normalizedRaw: string,
+): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+
+  return prisma
+    .$transaction(async (tx) => {
+      const proposals = await tx.sellerNoteProposal.findMany({
+        where: { productId, normalizedRaw },
+        select: { raw: true, nodeId: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (proposals.length === 0) throw new Error("이미 처리된 제안이다");
+
+      const raw = proposals[0].raw;
+      const nodeId = proposals.find((p) => p.nodeId)?.nodeId ?? null;
+
+      const dup = await tx.sellerNote.findFirst({ where: { productId, raw }, select: { id: true } });
+      if (dup) throw new Error("이미 있는 노트다");
+
+      const last = await tx.sellerNote.findFirst({
+        where: { productId },
+        orderBy: { position: "desc" },
+        select: { position: true },
+      });
+      await tx.sellerNote.create({
+        data: { productId, raw, nodeId, position: (last?.position ?? -1) + 1 },
+      });
+
+      const r = await recomputeHash(tx, productId);
+      if (!r.ok) {
+        throw new Error(`올리면 「${r.conflictName}」 과 같은 원두가 된다. 병합이 먼저다`);
+      }
+
+      await tx.sellerNoteProposal.deleteMany({ where: { productId, normalizedRaw } });
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidate("/");
+      revalidate("/admin");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
+/// 제안을 지운다. 향미가 아닌 표현 · 오타 · 중복이 실재한다 —
+/// 지우는 수단이 없으면 큐가 영영 안 빈다 (미매핑 큐와 같은 근거)
+export async function rejectNoteProposal(
+  productId: string,
+  normalizedRaw: string,
+): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+  await prisma.sellerNoteProposal.deleteMany({ where: { productId, normalizedRaw } });
+  revalidate("/admin");
+  return { ok: true };
+}
+
 export type AdminProductNote = {
   id: string;
   raw: string;
@@ -691,8 +912,9 @@ export async function listFlavorTree() {
 }
 
 export async function adminStats() {
-  const [unmapped, mapped, pendingVendors, pendingLookups, products, vendors, records] =
+  const [unmapped, mapped, pendingVendors, pendingLookups, products, vendors, records, proposalRows] =
     await Promise.all([
+      // 미매핑은 판매자 노트와 내가 느낀 향 양쪽에서 나온다
       prisma.sellerNote.count({ where: { nodeId: null } }),
       prisma.sellerNote.count({ where: { nodeId: { not: null } } }),
       prisma.vendor.count({ where: { status: VendorStatus.PENDING } }),
@@ -700,8 +922,23 @@ export async function adminStats() {
       prisma.product.count(),
       prisma.vendor.count(),
       prisma.experience.count(),
+      // 제안은 (원두 · 표현) 단위로 묶여 한 줄이 된다. 행 수를 그대로 세면
+      // 동의가 많은 제안 하나가 여러 건으로 보인다
+      prisma.sellerNoteProposal.findMany({
+        select: { productId: true, normalizedRaw: true },
+        distinct: ["productId", "normalizedRaw"],
+      }),
     ]);
-  return { unmapped, mapped, pendingVendors, pendingLookups, products, vendors, records };
+  return {
+    unmapped,
+    mapped,
+    pendingVendors,
+    pendingLookups,
+    products,
+    vendors,
+    records,
+    proposals: proposalRows.length,
+  };
 }
 
 export type PendingVendor = { id: string; name: string; productCount: number };

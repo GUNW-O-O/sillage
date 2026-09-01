@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 const NAV = [
   { href: "/admin", label: "개요", key: "unmapped" as const },
   { href: "/admin/unmapped", label: "미매핑 노트", key: "unmapped" as const },
+  { href: "/admin/proposals", label: "노트 제안", key: "proposals" as const },
   { href: "/admin/products", label: "원두 노트", key: null },
   { href: "/admin/pending", label: "승인 대기", key: "pending" as const },
   { href: "/admin/flavors", label: "향 계층", key: null },
@@ -22,7 +23,11 @@ const NAV = [
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const stats = await adminStats();
-  const badge = { unmapped: stats.unmapped, pending: stats.pendingVendors + stats.pendingLookups };
+  const badge = {
+    unmapped: stats.unmapped,
+    pending: stats.pendingVendors + stats.pendingLookups,
+    proposals: stats.proposals,
+  };
 
   return (
     <div className="flex min-h-dvh">
