@@ -833,7 +833,11 @@ export type AdminResult = { ok: true } | { ok: false; message: string };
 /// raw 를 노드에 붙인다. 같은 raw 를 쓰는 다른 미매핑 항목도 함께 붙는다 —
 /// 하나씩 보는 것보다 모아 보는 편이 판단이 정확하다는 것이 이 큐의 전제다.
 export async function attachNote(raw: string, nodeId: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const normalizedRaw = normalizeName(raw);
 
   return prisma.$transaction(async (tx) => {
@@ -878,7 +882,11 @@ export async function attachNote(raw: string, nodeId: string): Promise<AdminResu
 /// 오타 · 향미가 아닌 표기는 지운다. 행을 그대로 지운다 — 지키지 않을 값을 위해
 /// 모든 해시 계산과 대조 쿼리에 제외 조건을 달고 다닐 이유가 없다 (설계 7-4).
 export async function deleteNote(sellerNoteId: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   return prisma.$transaction(async (tx) => {
     const note = await tx.sellerNote.findUniqueOrThrow({
       where: { id: sellerNoteId },
@@ -989,7 +997,11 @@ export async function approveLookup(id: string): Promise<AdminResult> {
 /// 없어지는 쪽의 이름과 별칭이 남는 쪽의 aliases 로 들어가야
 /// 다음에 같은 표기가 들어와도 다시 갈라지지 않는다.
 export async function mergeLookup(sourceId: string, targetId: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   if (sourceId === targetId) return { ok: false, message: "같은 항목이다" };
 
   return prisma
@@ -1081,7 +1093,11 @@ export async function approveVendorWith(id: string, aliases: string[]): Promise<
 /// 로스터리 병합. Product 동일성 키에 vendorId 가 들어가므로 아래 원두의 키가
 /// 전부 움직인다 — 이전 후 대상 아래에서 중복을 다시 검사해야 한다 (설계 7-4).
 export async function mergeVendor(sourceId: string, targetId: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   if (sourceId === targetId) return { ok: false, message: "같은 로스터리다" };
 
   return prisma
@@ -1338,7 +1354,11 @@ export async function approveLookupEdited(
 /// 오타 · 무의미한 값을 지운다. attributes JSONB 안의 참조도 함께 걷어낸다 —
 /// FK 가 없어 남겨두면 고아 id 가 된다 (설계 4-3).
 export async function rejectLookup(id: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   return prisma
     .$transaction(async (tx) => {
       const products = await tx.product.findMany({ select: { id: true, attributes: true } });
@@ -1518,7 +1538,11 @@ export async function listFlavorTreeDetailed() {
 /// 그 표현을 쓰는 판매자 노트도 함께 옮기고 noteSetHash 를 재계산한다.
 /// 판정값은 그대로 둔다 — 축이 바뀐 것이지 판정이 바뀐 게 아니다.
 export async function remapAlias(aliasId: string, nodeId: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   return prisma
     .$transaction(async (tx) => {
       const alias = await tx.noteAlias.findUniqueOrThrow({
@@ -1556,7 +1580,11 @@ export async function remapAlias(aliasId: string, nodeId: string): Promise<Admin
 /// 매핑 자체가 틀렸을 때. 별칭을 지우고 그 표현을 쓰는 노트를 미매핑으로 되돌린다 —
 /// 다시 판단할 수 있게 큐로 보내는 것이지 데이터를 버리는 것이 아니다.
 export async function unmapAlias(aliasId: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   return prisma
     .$transaction(async (tx) => {
       const alias = await tx.noteAlias.findUniqueOrThrow({
