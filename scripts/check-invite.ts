@@ -1,5 +1,14 @@
-// 초대 코드 — DB 에 걸린 것만 본다. unique · 만료 · 1회용 · 소진 보호.
-// **제약은 DB 로만 확인된다.** 액션이 먼저 막아도 그것은 애플리케이션의 예의지 제약이 아니다.
+// 초대 코드 — 두 갈래를 본다.
+//
+// **DB 제약 자체** (11건 중 2건): 액션을 거치지 않고 raw prisma 로 직접 찌른다 —
+// 같은 code 중복 생성, 같은 usedByUserId 로 두 번 소진. 스키마에서 그 `@unique` 를
+// 지우면 이 둘만 FAIL 로 뒤집힌다.
+//
+// **액션의 거절** (나머지 9건): issueInviteCode · revokeInviteCode 안의 `if` 문이
+// 실제로 막는지 보는 통합 검사다. label 에는 CHECK 제약이 없고, 소진된 InviteCode 를
+// 지워도 FK 위반이 나지 않는다(참조가 User 쪽으로만 나간다) — 이 아홉은 액션의 JS 가드를
+// 지우면 FAIL 로 뒤집히지만 DB 제약과는 무관하다. 그래도 지울 가치는 없다: 이 액션들이
+// 실제로 거절하는지를 보는 유일한 자리다.
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
@@ -26,7 +35,18 @@ async function cleanup() {
 
 async function main() {
   await cleanup();
+  // 이 아래에서 예상 못한 예외가 나도(assert 실패가 아니라 throw) cleanup 은 돈다 —
+  // try/catch 로 잡는 두 DB 확률 검사 말고는 전부 바깥 main().catch() 로 새는데,
+  // 거길 거치면 아래 trailing cleanup() 이 건너뛰어져 검증용 행이 남는다.
+  // finally 로 옮겨 실패 경로에서도 InviteCode → User 순서(FK 방향)로 청소되게 한다.
+  try {
+    await runChecks();
+  } finally {
+    await cleanup();
+  }
+}
 
+async function runChecks() {
   ok((await issueInviteCode(`${TAG} 김철수`)).ok, "코드를 발급한다");
 
   const mine = (await listInviteCodes()).filter((r) => r.label.startsWith(TAG));
@@ -82,7 +102,6 @@ async function main() {
   ok((await revokeInviteCode(second.id)).ok, "안 쓴 코드는 지워진다");
   ok(!(await revokeInviteCode("없는id")).ok, "없는 코드는 거절한다");
 
-  await cleanup();
   if (failed > 0) {
     console.error(`\n${failed}건 실패`);
     process.exitCode = 1;
