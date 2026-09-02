@@ -21,6 +21,7 @@ const NAV = [
   { href: "/admin/flavors", label: "향 계층", key: null },
   { href: "/admin/lookups", label: "품종 · 가공", key: null },
   { href: "/admin/vendors", label: "로스터리", key: null },
+  { href: "/admin/accounts", label: "계정", key: null },
 ];
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
