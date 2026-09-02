@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { NoteCycle } from "@/components/note-cycle";
-import { currentUserId } from "@/lib/current-user";
+import { currentUserId } from "@/lib/auth/identity";
 import { prisma } from "@/lib/db";
 import { collectLookupIds, describeProduct } from "@/lib/product-display";
 
@@ -17,7 +17,7 @@ const fmt = (d: Date) =>
 
 export default async function RecordPage({ params }: PageProps<"/products/[id]/record">) {
   const { id } = await params;
-  const userId = currentUserId();
+  const userId = await currentUserId();
 
   const product = await prisma.product.findUnique({
     where: { id },

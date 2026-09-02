@@ -14,7 +14,8 @@ import {
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db";
-import { currentUserId, requireAdmin } from "@/lib/current-user";
+import { requireAdmin } from "@/lib/auth/guards";
+import { currentUserId } from "@/lib/auth/identity";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
 import { normalizeName } from "@/lib/normalize";
 import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
@@ -82,7 +83,7 @@ export async function createVendor(name: string): Promise<VendorHit> {
       name: trimmed,
       normalizedName,
       status: VendorStatus.PENDING,
-      createdById: currentUserId(),
+      createdById: await currentUserId(),
     },
     select: { id: true, name: true, status: true },
   });
@@ -92,7 +93,7 @@ export async function createVendor(name: string): Promise<VendorHit> {
 /// 선택한 로스터리 안에서 원두를 찾는다 (요구 FR-2).
 /// 이미 내 기록이 붙어 있으면 표시한다 — 다시 고르면 새 기록이 아니라 편집으로 간다 (FR-6).
 export async function searchProducts(vendorId: string, query: string): Promise<ProductHit[]> {
-  const userId = currentUserId();
+  const userId = await currentUserId();
   const q = normalizeName(query);
 
   const products = await prisma.product.findMany({
@@ -131,7 +132,7 @@ export type ProductGlobalHit = ProductHit & { vendorName: string };
 export async function searchProductsGlobal(query: string): Promise<ProductGlobalHit[]> {
   const q = normalizeName(query);
   if (q.length < MIN_QUERY_LENGTH) return [];
-  const userId = currentUserId();
+  const userId = await currentUserId();
 
   // `LIKE 'q%'` 와 `%` 둘 다 Product_normalizedName_idx 를 탄다.
   // `contains`(= LIKE '%q%')를 안 쓰는 이유는 앞 일치에 우선순위를 줘야 하기 때문이다 —
@@ -264,7 +265,7 @@ export async function createLookup(
       nameKo: trimmed,
       normalizedName,
       status: LookupStatus.PENDING,
-      createdById: currentUserId(),
+      createdById: await currentUserId(),
     },
     select: { id: true, nameKo: true, status: true },
   });
@@ -326,7 +327,7 @@ export async function createProduct(input: CreateProductInput): Promise<CreatePr
       normalizedName,
       noteSetHash,
       attributes: input.attributes as Prisma.InputJsonValue,
-      createdById: currentUserId(),
+      createdById: await currentUserId(),
       sellerNotes: {
         create: notes.map((n, i) => ({ raw: n.raw, nodeId: n.nodeId, position: i })),
       },
@@ -360,7 +361,7 @@ export async function saveRecord(
   /// 판정값이 없다 — 판매자의 주장이 없으니 대조할 좌변이 없고, 적었다는 사실 자체가 값이다
   extraNotes: NoteInput[] = [],
 ): Promise<{ ok: true }> {
-  const userId = currentUserId();
+  const userId = await currentUserId();
 
   await prisma.$transaction(async (tx) => {
     const experience = await tx.experience.upsert({
@@ -421,7 +422,7 @@ export async function saveRecord(
 }
 
 export async function deleteRecord(productId: string): Promise<{ ok: true }> {
-  await prisma.experience.deleteMany({ where: { userId: currentUserId(), productId } });
+  await prisma.experience.deleteMany({ where: { userId: await currentUserId(), productId } });
   revalidate("/");
   return { ok: true };
 }
@@ -502,12 +503,12 @@ export async function proposeSellerNote(
       productId_normalizedRaw_createdById: {
         productId,
         normalizedRaw,
-        createdById: currentUserId(),
+        createdById: await currentUserId(),
       },
     },
     // 두 번째 제안은 아무것도 안 바꾼다. raw 를 덮으면 먼저 낸 사람의 표기가 바뀐다
     update: {},
-    create: { productId, raw: trimmed, normalizedRaw, nodeId, createdById: currentUserId() },
+    create: { productId, raw: trimmed, normalizedRaw, nodeId, createdById: await currentUserId() },
   });
   revalidate("/");
   return { ok: true };
@@ -519,7 +520,7 @@ export async function withdrawNoteProposal(
   normalizedRaw: string,
 ): Promise<AdminResult> {
   await prisma.sellerNoteProposal.deleteMany({
-    where: { productId, normalizedRaw, createdById: currentUserId() },
+    where: { productId, normalizedRaw, createdById: await currentUserId() },
   });
   revalidate("/");
   return { ok: true };
@@ -527,7 +528,7 @@ export async function withdrawNoteProposal(
 
 /// 원두 화면이 쓴다. 표현 단위로 묶어 동의 수를 센다
 export async function listProductProposals(productId: string): Promise<NoteProposal[]> {
-  const userId = currentUserId();
+  const userId = await currentUserId();
   const rows = await prisma.sellerNoteProposal.findMany({
     where: { productId },
     select: {
@@ -1191,7 +1192,7 @@ export async function createLookupApproved(
       normalizedName,
       aliases: [...new Set(aliases.map((a) => a.trim()).filter(Boolean))],
       status: LookupStatus.APPROVED,
-      createdById: currentUserId(),
+      createdById: await currentUserId(),
     },
   });
   revalidate("/admin");
@@ -1219,7 +1220,7 @@ export async function createVendorApproved(
       normalizedName,
       aliases: [...new Set(aliases.map((a) => a.trim()).filter(Boolean))],
       status: VendorStatus.APPROVED,
-      createdById: currentUserId(),
+      createdById: await currentUserId(),
     },
   });
   revalidate("/admin");
@@ -1385,7 +1386,7 @@ export type RecordDetail = {
 
 /// 목록에서 기록을 열 때 쓴다. 모달이라 목록을 떠나지 않으므로 필요한 것을 한 번에 싣는다.
 export async function getRecordDetail(productId: string): Promise<RecordDetail | null> {
-  const userId = currentUserId();
+  const userId = await currentUserId();
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {
@@ -1783,7 +1784,7 @@ function aggregateExtraNotes(
 }
 
 export async function getProductDetail(productId: string): Promise<ProductDetail | null> {
-  const userId = currentUserId();
+  const userId = await currentUserId();
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {

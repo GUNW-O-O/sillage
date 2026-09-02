@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { currentUserId } from "@/lib/current-user";
+import { currentUserId } from "@/lib/auth/identity";
 import { prisma } from "@/lib/db";
 
 // FR-4 — "이것으로 기록을 입력할까요?"
@@ -18,7 +18,7 @@ export default async function ConfirmPage({ params }: PageProps<"/products/[id]/
       name: true,
       vendor: { select: { name: true } },
       sellerNotes: { select: { raw: true, nodeId: true }, orderBy: { position: "asc" } },
-      experiences: { where: { userId: currentUserId() }, select: { id: true }, take: 1 },
+      experiences: { where: { userId: await currentUserId() }, select: { id: true }, take: 1 },
     },
   });
   if (!product) notFound();

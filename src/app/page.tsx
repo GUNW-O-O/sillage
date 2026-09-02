@@ -1,13 +1,13 @@
 import { AppShell } from "@/components/app-shell";
 import { RecordList } from "@/components/record-list";
-import { currentUserId } from "@/lib/current-user";
+import { currentUserId } from "@/lib/auth/identity";
 import { prisma } from "@/lib/db";
 
 // 개인 데이터라 SEO 대상이 아니다. 서버에서 읽고 넘긴다.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const userId = currentUserId();
+  const userId = await currentUserId();
 
   const records = await prisma.experience.findMany({
     where: { userId },
