@@ -42,10 +42,16 @@ model User {
 
 model InviteCode {
   id String @id @default(cuid())
-  /// 6자리 숫자의 해시. 평문 저장 금지 (4-9)
-  codeHash     String   @unique
+  /// 6자리 숫자. **평문으로 저장한다** (설계 5-2). 어드민 목록에서 발급한 코드를 다시
+  /// 볼 수 있어야 직접 건네는 방식이 성립한다. 해시로 두면 발급 직후 1회 표시가 전부다.
+  /// 대가는 DB 를 읽을 수 있는 경로에서 미소진 코드를 24시간 안에 쓸 수 있다는 것 —
+  /// 폭발 반경이 계정 하나라 받아들였다. 진짜 방어는 만료와 시도 제한이다
+  code String @unique
+  /// 누구에게 주는 코드인지. 교환 성공 시 User.displayName 이 된다 (설계 5-3).
+  /// 소진 전에도 어드민 목록에서 "누구 코드인지" 가 보인다
+  label        String
   createdById  String
-  usedByUserId String?  @unique
+  usedByUserId String? @unique
   expiresAt    DateTime
   createdAt    DateTime @default(now())
 
