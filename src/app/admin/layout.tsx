@@ -1,13 +1,15 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 
 import { adminStats } from "@/app/actions";
+import { currentUser } from "@/lib/auth/identity";
 
 // 어드민은 PC 전용 · 전부 CSR 이다 (설계 7-4). 반응형 대상에서 빼면 표와 폼으로 끝나고,
 // SEO 대상이 아니라 SSR 도 Workers CPU 한도와도 무관하다.
 //
 // 접근 통제는 서버가 한다 — 공개 URL 이라 경로만 알면 요청이 들어온다.
-// 지금은 로그인이 없어(요구 FR-10) 통제할 대상이 없다. 세션이 붙는 순간
-// 이 레이아웃과 모든 어드민 액션에서 role = admin 을 확인해야 한다.
+// 레이아웃과 어드민 액션 양쪽에서 확인한다. 레이아웃만으로는 부족하다 —
+// 서버 액션은 화면을 안 거치고도 불린다 (설계 4-1).
 export const dynamic = "force-dynamic";
 
 const NAV = [
@@ -22,6 +24,10 @@ const NAV = [
 ];
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
+  // **403 이 아니라 404 다.** 403 은 "여기 어드민이 있다" 를 알려준다 (설계 4-2)
+  const user = await currentUser();
+  if (user?.role !== "ADMIN") notFound();
+
   const stats = await adminStats();
   const badge = {
     unmapped: stats.unmapped,

@@ -766,6 +766,7 @@ export type UnmappedNote = {
 /// 등록 폼에서 노트 분류를 뺐으므로 여기가 없으면 noteSetHash 가 전부
 /// unmapped 토큰으로 남아 동일성 키가 무의미해진다.
 export async function listUnmappedNotes(): Promise<UnmappedNote[]> {
+  await requireAdmin();
   // 판매자 노트와 내가 느낀 향을 **한 큐에서** 본다. NoteAlias 는 표현→노드 사전이고
   // 표현이 같으면 노드도 같아야 한다 — 큐를 나누면 같은 raw 를 두 번 판단하게 되고
   // 사전이 갈릴 수 있다
@@ -832,6 +833,7 @@ export type AdminResult = { ok: true } | { ok: false; message: string };
 /// raw 를 노드에 붙인다. 같은 raw 를 쓰는 다른 미매핑 항목도 함께 붙는다 —
 /// 하나씩 보는 것보다 모아 보는 편이 판단이 정확하다는 것이 이 큐의 전제다.
 export async function attachNote(raw: string, nodeId: string): Promise<AdminResult> {
+  await requireAdmin();
   const normalizedRaw = normalizeName(raw);
 
   return prisma.$transaction(async (tx) => {
@@ -876,6 +878,7 @@ export async function attachNote(raw: string, nodeId: string): Promise<AdminResu
 /// 오타 · 향미가 아닌 표기는 지운다. 행을 그대로 지운다 — 지키지 않을 값을 위해
 /// 모든 해시 계산과 대조 쿼리에 제외 조건을 달고 다닐 이유가 없다 (설계 7-4).
 export async function deleteNote(sellerNoteId: string): Promise<AdminResult> {
+  await requireAdmin();
   return prisma.$transaction(async (tx) => {
     const note = await tx.sellerNote.findUniqueOrThrow({
       where: { id: sellerNoteId },
@@ -896,6 +899,7 @@ export async function deleteNote(sellerNoteId: string): Promise<AdminResult> {
 /// 동일성 키 밖이라 해시가 안 움직이고, 마지막 하나를 지켜야 할 이유도 없다
 /// (판매자 노트가 0개면 대조할 주장이 없어지지만, 이건 부가 항목이다).
 export async function deleteExtraNote(extraNoteId: string): Promise<AdminResult> {
+  await requireAdmin();
   // `deleteNote` 와 마찬가지로 revalidatePath 를 안 부른다 — 이 항목은 목록 화면에
   // 안 나오고, 큐 화면은 스스로 router.refresh() 한다
   await prisma.extraNote.delete({ where: { id: extraNoteId } });
@@ -903,6 +907,7 @@ export async function deleteExtraNote(extraNoteId: string): Promise<AdminResult>
 }
 
 export async function listFlavorTree() {
+  await requireAdmin();
   const nodes = await prisma.flavorNode.findMany({
     select: { id: true, level: true, parentId: true, labelKo: true },
     orderBy: [{ level: "asc" }, { labelKo: "asc" }],
@@ -913,6 +918,7 @@ export async function listFlavorTree() {
 }
 
 export async function adminStats() {
+  await requireAdmin();
   const [unmapped, mapped, pendingVendors, pendingLookups, products, vendors, records, proposalRows] =
     await Promise.all([
       // 미매핑은 판매자 노트와 내가 느낀 향 양쪽에서 나온다
@@ -946,6 +952,7 @@ export type PendingVendor = { id: string; name: string; productCount: number };
 export type PendingLookup = { id: string; kind: LookupKind; nameKo: string; nameEn: string | null };
 
 export async function listPending() {
+  await requireAdmin();
   const [vendors, lookups] = await Promise.all([
     prisma.vendor.findMany({
       where: { status: VendorStatus.PENDING },
@@ -965,12 +972,14 @@ export async function listPending() {
 }
 
 export async function approveVendor(id: string): Promise<AdminResult> {
+  await requireAdmin();
   await prisma.vendor.update({ where: { id }, data: { status: VendorStatus.APPROVED } });
   revalidate("/admin");
   return { ok: true };
 }
 
 export async function approveLookup(id: string): Promise<AdminResult> {
+  await requireAdmin();
   await prisma.lookupValue.update({ where: { id }, data: { status: LookupStatus.APPROVED } });
   revalidate("/admin");
   return { ok: true };
@@ -980,6 +989,7 @@ export async function approveLookup(id: string): Promise<AdminResult> {
 /// 없어지는 쪽의 이름과 별칭이 남는 쪽의 aliases 로 들어가야
 /// 다음에 같은 표기가 들어와도 다시 갈라지지 않는다.
 export async function mergeLookup(sourceId: string, targetId: string): Promise<AdminResult> {
+  await requireAdmin();
   if (sourceId === targetId) return { ok: false, message: "같은 항목이다" };
 
   return prisma
@@ -1035,6 +1045,7 @@ export async function mergeLookup(sourceId: string, targetId: string): Promise<A
 }
 
 export async function listLookupsByKind(kind: LookupKind) {
+  await requireAdmin();
   return prisma.lookupValue.findMany({
     where: { kind, status: LookupStatus.APPROVED },
     select: { id: true, nameKo: true },
@@ -1046,6 +1057,7 @@ export async function listLookupsByKind(kind: LookupKind) {
 /// 승인하면서 별칭을 같이 받는다. 표기 흔들림을 흡수하는 경로가 aliases 뿐이라
 /// 승인 시점이 그걸 적어둘 유일한 자리다 (설계 4-2 · 4-8).
 export async function approveLookupWith(id: string, aliases: string[]): Promise<AdminResult> {
+  await requireAdmin();
   const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
   await prisma.lookupValue.update({
     where: { id },
@@ -1056,6 +1068,7 @@ export async function approveLookupWith(id: string, aliases: string[]): Promise<
 }
 
 export async function approveVendorWith(id: string, aliases: string[]): Promise<AdminResult> {
+  await requireAdmin();
   const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
   await prisma.vendor.update({
     where: { id },
@@ -1068,6 +1081,7 @@ export async function approveVendorWith(id: string, aliases: string[]): Promise<
 /// 로스터리 병합. Product 동일성 키에 vendorId 가 들어가므로 아래 원두의 키가
 /// 전부 움직인다 — 이전 후 대상 아래에서 중복을 다시 검사해야 한다 (설계 7-4).
 export async function mergeVendor(sourceId: string, targetId: string): Promise<AdminResult> {
+  await requireAdmin();
   if (sourceId === targetId) return { ok: false, message: "같은 로스터리다" };
 
   return prisma
@@ -1116,6 +1130,7 @@ export async function mergeVendor(sourceId: string, targetId: string): Promise<A
 }
 
 export async function listApprovedVendors() {
+  await requireAdmin();
   const rows = await prisma.vendor.findMany({
     where: { status: VendorStatus.APPROVED },
     select: { id: true, name: true },
@@ -1144,6 +1159,7 @@ export async function createFlavorNodeL2(
   labelKo: string,
   labelEn: string,
 ): Promise<AdminResult> {
+  await requireAdmin();
   const ko = labelKo.trim();
   const en = labelEn.trim();
   const id = slugify(en);
@@ -1174,6 +1190,7 @@ export async function createLookupApproved(
   nameEn: string,
   aliases: string[],
 ): Promise<AdminResult> {
+  await requireAdmin();
   const ko = nameKo.trim();
   const normalizedName = normalizeName(ko);
   if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
@@ -1204,6 +1221,7 @@ export async function createVendorApproved(
   name: string,
   aliases: string[],
 ): Promise<AdminResult> {
+  await requireAdmin();
   const trimmed = name.trim();
   const normalizedName = normalizeName(trimmed);
   if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
@@ -1228,6 +1246,7 @@ export async function createVendorApproved(
 }
 
 export async function listVendorsAdmin() {
+  await requireAdmin();
   const rows = await prisma.vendor.findMany({
     select: {
       id: true,
@@ -1249,6 +1268,7 @@ export async function listVendorsAdmin() {
 }
 
 export async function listLookupsAdmin(kind: LookupKind) {
+  await requireAdmin();
   return prisma.lookupValue.findMany({
     where: { kind },
     select: { id: true, nameKo: true, nameEn: true, aliases: true, status: true },
@@ -1265,6 +1285,7 @@ export async function createNodeAndAttach(
   labelKo: string,
   labelEn: string,
 ): Promise<AdminResult> {
+  await requireAdmin();
   const created = await createFlavorNodeL2(parentId, labelKo, labelEn);
   if (!created.ok) return created;
   return attachNote(raw, slugify(labelEn));
@@ -1279,6 +1300,7 @@ export async function approveLookupEdited(
   nameEn: string,
   aliases: string[],
 ): Promise<AdminResult> {
+  await requireAdmin();
   const ko = nameKo.trim();
   const normalizedName = normalizeName(ko);
   if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
@@ -1316,6 +1338,7 @@ export async function approveLookupEdited(
 /// 오타 · 무의미한 값을 지운다. attributes JSONB 안의 참조도 함께 걷어낸다 —
 /// FK 가 없어 남겨두면 고아 id 가 된다 (설계 4-3).
 export async function rejectLookup(id: string): Promise<AdminResult> {
+  await requireAdmin();
   return prisma
     .$transaction(async (tx) => {
       const products = await tx.product.findMany({ select: { id: true, attributes: true } });
@@ -1355,6 +1378,7 @@ export async function rejectLookup(id: string): Promise<AdminResult> {
 /// 로스터리는 원두가 붙어 있으면 못 지운다. 지우면 그 원두들이 갈 곳이 없다 —
 /// 그런 경우는 삭제가 아니라 흡수다.
 export async function rejectVendor(id: string): Promise<AdminResult> {
+  await requireAdmin();
   const count = await prisma.product.count({ where: { vendorId: id } });
   if (count > 0) {
     return { ok: false, message: `원두 ${count}개가 붙어 있다. 흡수를 써달라` };
@@ -1453,6 +1477,7 @@ export type FlavorTreeNode = {
 };
 
 export async function listFlavorTreeDetailed() {
+  await requireAdmin();
   const [nodes, aliases, counts] = await Promise.all([
     prisma.flavorNode.findMany({
       select: { id: true, level: true, parentId: true, labelKo: true, labelEn: true },
@@ -1493,6 +1518,7 @@ export async function listFlavorTreeDetailed() {
 /// 그 표현을 쓰는 판매자 노트도 함께 옮기고 noteSetHash 를 재계산한다.
 /// 판정값은 그대로 둔다 — 축이 바뀐 것이지 판정이 바뀐 게 아니다.
 export async function remapAlias(aliasId: string, nodeId: string): Promise<AdminResult> {
+  await requireAdmin();
   return prisma
     .$transaction(async (tx) => {
       const alias = await tx.noteAlias.findUniqueOrThrow({
@@ -1530,6 +1556,7 @@ export async function remapAlias(aliasId: string, nodeId: string): Promise<Admin
 /// 매핑 자체가 틀렸을 때. 별칭을 지우고 그 표현을 쓰는 노트를 미매핑으로 되돌린다 —
 /// 다시 판단할 수 있게 큐로 보내는 것이지 데이터를 버리는 것이 아니다.
 export async function unmapAlias(aliasId: string): Promise<AdminResult> {
+  await requireAdmin();
   return prisma
     .$transaction(async (tx) => {
       const alias = await tx.noteAlias.findUniqueOrThrow({
