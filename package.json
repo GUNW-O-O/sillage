@@ -16,10 +16,11 @@
     "check:register": "tsx scripts/check-register.ts",
     "postinstall": "prisma generate",
     "check:record": "tsx scripts/check-record.ts",
-    "check": "npm run check:register && npm run check:record && npm run check:admin && npm run check:edit && npm run check:search",
+    "check": "npm run check:register && npm run check:record && npm run check:admin && npm run check:edit && npm run check:search && npm run check:invite",
     "check:admin": "tsx scripts/check-admin.ts",
     "check:edit": "tsx scripts/check-edit.ts",
     "check:search": "tsx scripts/check-search.ts",
+    "check:invite": "tsx scripts/check-invite.ts",
     "e2e": "playwright test"
   },
   "dependencies": {

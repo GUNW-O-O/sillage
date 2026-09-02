@@ -16,6 +16,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth/guards";
 import { currentUserId } from "@/lib/auth/identity";
+import { generateInviteCode, INVITE_TTL_MS } from "@/lib/auth/invite-code";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
 import { normalizeName } from "@/lib/normalize";
 import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
@@ -1908,4 +1909,96 @@ export async function getProductDetail(productId: string): Promise<ProductDetail
       };
     }),
   };
+}
+
+// ─────────────────────────────────────────── 계정 · 초대 코드 (설계 5)
+
+export type InviteCodeRow = {
+  id: string;
+  code: string;
+  label: string;
+  expiresAt: Date;
+  expired: boolean;
+  usedBy: { id: string; displayName: string } | null;
+  createdAt: Date;
+};
+
+/// 초대 코드를 발급한다. **label 이 곧 새 계정의 표시명이다** (설계 5-3) —
+/// 교환 화면은 코드 6자리만 받는다.
+export async function issueInviteCode(label: string): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+  const trimmed = label.trim();
+  if (!trimmed) return { ok: false, message: "누구에게 주는 코드인지 적는다" };
+
+  const issuer = await currentUserId();
+  // code 가 unique 라 100만 분의 1로 부딪힌다. 세 번까지 다시 뽑는다 —
+  // 부딪혔다고 사람에게 되묻는 것은 사람이 할 수 있는 게 없는 요청이다
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await prisma.inviteCode.create({
+        data: {
+          code: generateInviteCode(),
+          label: trimmed,
+          createdById: issuer,
+          expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+        },
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+      throw e;
+    }
+  }
+  return { ok: false, message: "코드가 계속 겹친다. 다시 시도한다" };
+}
+
+/// 만료는 지우지 않고 표시만 한다. **언제 누구에게 뭘 발급했는지가 기록이다.**
+export async function listInviteCodes(): Promise<InviteCodeRow[]> {
+  await requireAdmin();
+  const rows = await prisma.inviteCode.findMany({
+    select: {
+      id: true,
+      code: true,
+      label: true,
+      expiresAt: true,
+      createdAt: true,
+      usedBy: { select: { id: true, displayName: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const now = Date.now();
+  return rows.map((r) => ({ ...r, expired: r.expiresAt.getTime() < now }));
+}
+
+/// 잘못 발급한 코드를 지운다.
+///
+/// **소진된 코드는 못 지운다.** 지우면 그 계정이 어떤 초대로 들어왔는지가 사라진다 —
+/// 초대제에서 그 연결이 유일한 계보다.
+export async function revokeInviteCode(id: string): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+  const row = await prisma.inviteCode.findUnique({
+    where: { id },
+    select: { usedByUserId: true },
+  });
+  if (!row) return { ok: false, message: "없는 코드다" };
+  if (row.usedByUserId) return { ok: false, message: "이미 쓴 코드는 못 지운다" };
+  await prisma.inviteCode.delete({ where: { id } });
+  return { ok: true };
+}
+
+/// role 변경은 없다. 어드민이 하나뿐이라 승격할 대상이 존재하지 않는다 (설계 5-5).
+export async function listAccounts() {
+  await requireAdmin();
+  return prisma.user.findMany({
+    select: { id: true, displayName: true, role: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
 }

@@ -45,4 +45,9 @@ export const ADMIN_ACTIONS = [
   "getAdminProduct",
   "addSellerNote",
   "deleteSellerNote",
+  // 계정 · 초대 코드
+  "issueInviteCode",
+  "listInviteCodes",
+  "revokeInviteCode",
+  "listAccounts",
 ] as const;
