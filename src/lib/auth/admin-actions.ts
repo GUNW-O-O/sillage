@@ -12,10 +12,7 @@ export const ADMIN_ACTIONS = [
   "deleteExtraNote",
   // 승인 · 기각
   "listPending",
-  "approveVendor",
-  "approveLookup",
   "approveVendorWith",
-  "approveLookupWith",
   "approveLookupEdited",
   "rejectVendor",
   "rejectLookup",

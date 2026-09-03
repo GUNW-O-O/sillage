@@ -499,17 +499,12 @@ export async function proposeSellerNote(
   });
   if (exists) return { ok: false, message: "이미 이 원두의 노트예요" };
 
+  const createdById = await currentUserId();
   await prisma.sellerNoteProposal.upsert({
-    where: {
-      productId_normalizedRaw_createdById: {
-        productId,
-        normalizedRaw,
-        createdById: await currentUserId(),
-      },
-    },
+    where: { productId_normalizedRaw_createdById: { productId, normalizedRaw, createdById } },
     // 두 번째 제안은 아무것도 안 바꾼다. raw 를 덮으면 먼저 낸 사람의 표기가 바뀐다
     update: {},
-    create: { productId, raw: trimmed, normalizedRaw, nodeId, createdById: await currentUserId() },
+    create: { productId, raw: trimmed, normalizedRaw, nodeId, createdById },
   });
   revalidate("/");
   return { ok: true };
@@ -984,31 +979,6 @@ export async function listPending() {
   };
 }
 
-export async function approveVendor(id: string): Promise<AdminResult> {
-  try {
-    await requireAdmin();
-  } catch (e) {
-    return { ok: false, message: (e as Error).message };
-  }
-  await prisma.vendor.update({ where: { id }, data: { status: VendorStatus.APPROVED } });
-  revalidate("/admin");
-  return { ok: true };
-}
-
-export async function approveLookup(id: string): Promise<AdminResult> {
-  try {
-    await requireAdmin();
-  } catch (e) {
-    return { ok: false, message: (e as Error).message };
-  }
-  await prisma.lookupValue.update({ where: { id }, data: { status: LookupStatus.APPROVED } });
-  revalidate("/admin");
-  return { ok: true };
-}
-
-/// 병합의 실체는 삭제가 아니라 **흡수**다 (설계 4-8).
-/// 없어지는 쪽의 이름과 별칭이 남는 쪽의 aliases 로 들어가야
-/// 다음에 같은 표기가 들어와도 다시 갈라지지 않는다.
 export async function mergeLookup(sourceId: string, targetId: string): Promise<AdminResult> {
   try {
     await requireAdmin();
@@ -1077,23 +1047,6 @@ export async function listLookupsByKind(kind: LookupKind) {
     orderBy: [{ sortWeight: "desc" }, { nameKo: "asc" }],
     take: 300,
   });
-}
-
-/// 승인하면서 별칭을 같이 받는다. 표기 흔들림을 흡수하는 경로가 aliases 뿐이라
-/// 승인 시점이 그걸 적어둘 유일한 자리다 (설계 4-2 · 4-8).
-export async function approveLookupWith(id: string, aliases: string[]): Promise<AdminResult> {
-  try {
-    await requireAdmin();
-  } catch (e) {
-    return { ok: false, message: (e as Error).message };
-  }
-  const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
-  await prisma.lookupValue.update({
-    where: { id },
-    data: { status: LookupStatus.APPROVED, ...(clean.length ? { aliases: clean } : {}) },
-  });
-  revalidate("/admin");
-  return { ok: true };
 }
 
 export async function approveVendorWith(id: string, aliases: string[]): Promise<AdminResult> {
