@@ -1,6 +1,6 @@
 import { devices, expect, test } from "@playwright/test";
 
-import { clickUntil, prisma, typeAndClick } from "./helpers";
+import { prisma, typeAndClick } from "./helpers";
 
 // **데스크톱 뷰포트다.** 어드민은 PC 전용이고 반응형 대상이 아니다 (설계 7-4).
 test.use({ ...devices["Desktop Chrome"] });

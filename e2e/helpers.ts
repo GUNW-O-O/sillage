@@ -25,7 +25,18 @@ export const USER = "seed-admin";
 /// 기다릴 조건은 **로케이터로 받는다.** 문자열로 받으면 우연히 다른 자리에 있는 같은
 /// 문구에 걸려 조용히 통과한다 — 목록의 `느낀 노트 / 판매자 노트` 가 실제로 그랬다.
 export async function actUntil(act: () => Promise<unknown>, appears: Locator) {
+  let acted = false;
   await expect(async () => {
+    // **두 번째 시도부터는 다시 누르기 전에 조건을 먼저 본다.** 첫 클릭이 먹었는데
+    // 결과가 1초 안에 안 나오는 경우(dev 서버가 다음 라우트를 처음 컴파일할 때가 그렇다)
+    // 누를 것은 이미 화면에서 사라져 있다. 그 자리에서 다시 누르면 Playwright 는
+    // 기본 actionTimeout 이 0 이라 **영영 기다리고**, 조건을 다시 볼 기회가 오지 않는다 —
+    // 결과는 이미 화면에 떠 있는데 20초를 채우고 실패한다 (register.spec.ts 가 그랬다).
+    //
+    // 첫 시도는 그대로 누른다. 조건이 처음부터 떠 있는 경우(항상 있는 요소를 기다리는
+    // 테스트)에 아무것도 안 누르고 통과해버리는 것을 막는다
+    if (acted && (await appears.first().isVisible())) return;
+    acted = true;
     await act();
     await expect(appears.first()).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
@@ -34,7 +45,8 @@ export async function actUntil(act: () => Promise<unknown>, appears: Locator) {
 /// 누를 것도 로케이터로 받는다. 이름 부분 일치는 **엉뚱한 것을 집는다** —
 /// 시드 원두 이름이 목록 버튼의 접근성 이름에 들어가 있어 시트 뒤의 행을 눌렀다
 export async function clickUntil(target: Locator, appears: Locator) {
-  await actUntil(() => target.first().click(), appears);
+  // **시간 제한을 준다.** 사라진 요소를 무기한 기다리면 재시도 자체가 멈춘다 (actUntil 참고)
+  await actUntil(() => target.first().click({ timeout: 2000 }), appears);
 }
 
 /// aria-label 로 다는 아이콘 버튼. 정확히 일치시켜야 목록 행에 안 걸린다
@@ -62,8 +74,8 @@ export async function typeAndClick(
 /// 상태는 빈 문자열이라 길이로 활성화되는 `찾기` 버튼이 영영 비활성으로 남았다
 export async function typeInto(page: Page, placeholder: string, text: string) {
   const input = page.getByPlaceholder(placeholder);
-  await input.fill("");
-  await input.pressSequentially(text);
+  await input.fill("", { timeout: 2000 });
+  await input.pressSequentially(text, { timeout: 2000 });
 }
 
 /// 결과가 화면이 아니라 DB 에 나타나는 조작에 쓴다.
@@ -95,7 +107,7 @@ export async function addChip(page: Page, placeholder: string, text: string) {
   // getByRole 의 name 은 기본이 부분 일치라 정규식이 필요 없다
   await actUntil(async () => {
     await typeInto(page, placeholder, text);
-    await page.getByPlaceholder(placeholder).press("Enter");
+    await page.getByPlaceholder(placeholder).press("Enter", { timeout: 2000 });
   }, page.getByRole("button", { name: text }));
 }
 
