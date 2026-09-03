@@ -26,6 +26,12 @@ export function AccountAdmin({ accounts, codes }: { accounts: Account[]; codes: 
       }
     });
 
+  // 설계 5-4 의 가입일 칸. 초대 코드의 「언제 소진됐나」는 아직 못 채운다 —
+  // InviteCode 에 usedAt 컬럼이 없다. 코드를 소진시키는 교환 화면이 2차라
+  // 그때 컬럼과 함께 붙인다 (docs/backlog.md)
+  const joined = (d: Date) =>
+    `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+
   const state = (c: InviteCodeRow) =>
     c.usedBy ? `${c.usedBy.displayName} 이(가) 씀` : c.expired ? "만료" : "미사용";
 
@@ -103,6 +109,7 @@ export function AccountAdmin({ accounts, codes }: { accounts: Account[]; codes: 
             <tr>
               <th className="py-2 text-left font-normal">표시명</th>
               <th className="py-2 text-left font-normal">권한</th>
+              <th className="py-2 text-left font-normal">가입일</th>
             </tr>
           </thead>
           <tbody>
@@ -110,6 +117,7 @@ export function AccountAdmin({ accounts, codes }: { accounts: Account[]; codes: 
               <tr key={a.id} className="border-t border-hairline">
                 <td className="py-2 text-ink">{a.displayName}</td>
                 <td className="py-2 text-muted">{a.role === "ADMIN" ? "어드민" : "사용자"}</td>
+                <td className="tabular py-2 text-muted">{joined(a.createdAt)}</td>
               </tr>
             ))}
           </tbody>
