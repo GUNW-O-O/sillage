@@ -27,8 +27,12 @@ export async function signSessionToken(userId: string, nowMs = Date.now()): Prom
 /// 못 믿을 토큰은 전부 null 이다 — 변조 · 만료 · 다른 키 · 쓰레기 문자열을 구분하지 않는다.
 /// 호출부가 구분할 이유가 없고, 구분해서 알려주면 공격자에게 정보를 준다.
 export async function verifySessionToken(token: string): Promise<string | null> {
+  // **`secret()` 을 try 밖에서 부른다.** 안에서 부르면 AUTH_SECRET 이 없거나 짧은 것과
+  // 토큰이 위조된 것이 똑같이 null 로 나와, 설정 실수가 "전원 로그아웃" 으로만 보인다.
+  // 서명 쪽(`signSessionToken`)은 원래 시끄럽게 죽는데 검증 쪽만 조용했다.
+  const key = secret();
   try {
-    const { payload } = await jwtVerify(token, secret(), { algorithms: [ALG] });
+    const { payload } = await jwtVerify(token, key, { algorithms: [ALG] });
     return typeof payload.sub === "string" ? payload.sub : null;
   } catch {
     return null;

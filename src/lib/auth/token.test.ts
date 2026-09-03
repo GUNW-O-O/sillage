@@ -34,3 +34,11 @@ it("비밀키가 없으면 서명 자체가 실패한다", async () => {
   delete process.env.AUTH_SECRET;
   await expect(signSessionToken("user-1")).rejects.toThrow();
 });
+
+// 검증도 시끄럽게 죽어야 한다. null 로 삼키면 설정 실수가 "전원 로그아웃" 과
+// 구별되지 않는다 — 멀쩡한 토큰인데 키가 없는 것이 여기서 잡힌다
+it("비밀키가 없으면 검증이 null 이 아니라 예외를 낸다", async () => {
+  const token = await signSessionToken("user-1");
+  delete process.env.AUTH_SECRET;
+  await expect(verifySessionToken(token)).rejects.toThrow();
+});
