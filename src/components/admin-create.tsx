@@ -16,7 +16,7 @@ function useSubmit() {
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else {
         done();
         router.refresh();
@@ -154,7 +154,7 @@ export function AddFlavorNode({ parentId, parentLabel }: { parentId: string; par
         <Modal title={`${parentLabel} 아래에 추가`} subject="Level 2 노드" onClose={close}>
           <p className="mb-3 text-[13px] text-muted">
             id 는 영문 라벨에서 만들어지고 <strong className="text-ink">집계 축이라 나중에 못
-            바꾼다</strong>. 바꾸려면 데이터 마이그레이션이 필요하다.
+            바꿔요</strong>. 바꾸려면 데이터 마이그레이션이 필요해요.
           </p>
           <Text label="한글 라벨" value={labelKo} onChange={setKo} placeholder="예: 열대과일" />
           <Text label="영문 라벨 (id 의 근거)" value={labelEn} onChange={setEn} placeholder="Tropical Fruit" />
@@ -239,8 +239,8 @@ export function AddVendor() {
       {open && (
         <Modal title="로스터리 추가" subject={name || "새 로스터리"} onClose={close}>
           <p className="mb-3 text-[13px] text-muted">
-            Product 동일성 키를 우회하는 유일한 경로가 표기 흔들림이다. 별칭을 함께 적어두면
-            대부분 사라진다.
+            Product 동일성 키를 우회하는 유일한 경로가 표기 흔들림이에요. 별칭을 함께 적어 두면
+            대부분 사라져요.
           </p>
           <Text label="이름" value={name} onChange={setName} placeholder="커피리브레" />
           <AliasInput aliases={aliases} onChange={setAliases} />

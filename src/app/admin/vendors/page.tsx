@@ -12,8 +12,8 @@ export default async function VendorsPage() {
         <div>
           <h1 className="font-serif text-[26px] text-ink">로스터리</h1>
           <p className="mt-2 text-[13px] text-muted">
-            한 로스터리 아래 제품이 모이면 표기가 튀는 것이 바로 보인다. 감시자가 사람이 아니라
-            화면 배치다 (설계 4-2).
+            한 로스터리 아래 제품이 모이면 표기가 튀는 것이 바로 보여요. 감시자가 사람이 아니라
+            화면 배치인 셈이에요.
           </p>
         </div>
         <AddVendor />

@@ -22,7 +22,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else {
         setTarget(null);
         router.refresh();
@@ -81,7 +81,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-2 text-[12px] text-muted-soft">붙은 표현 없음</p>
+                    <p className="mt-2 text-[12px] text-muted-soft">붙은 표현이 없어요</p>
                   )}
                 </div>
               ))}
@@ -94,14 +94,14 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
 
       {target && (
         <Modal
-          title={`「${target.nodeLabel}」 에 붙어 있다`}
+          title={`「${target.nodeLabel}」 에 붙어 있어요`}
           subject={target.raw}
           onClose={() => setTarget(null)}
         >
           <p className="mb-4 text-[13px] text-muted">
-            옮기면 이 표현을 쓰는 판매자 노트가 함께 옮겨지고 noteSetHash 가 재계산된다.
-            <strong className="text-ink"> 판정값은 그대로다</strong> — 축이 바뀐 것이지 판정이
-            바뀐 게 아니다.
+            옮기면 이 표현을 쓰는 판매자 노트가 함께 옮겨지고 noteSetHash 가 재계산돼요.
+            <strong className="text-ink"> 판정값은 그대로예요</strong> — 축이 바뀐 것이지 판정이
+            바뀐 게 아니에요.
           </p>
 
           {tree.map((l1) => (
@@ -127,7 +127,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
             type="button"
             disabled={pending}
             onClick={() => {
-              if (!confirm(`“${target.raw}” 의 매핑을 지운다. 미매핑 큐로 돌아간다.`)) return;
+              if (!confirm(`“${target.raw}” 의 매핑을 지울까요? 미매핑 큐로 돌아가요.`)) return;
               run(() => unmapAlias(target.id));
             }}
             className="mt-5 h-11 w-full rounded-[10px] border border-hairline text-[15px] text-danger"

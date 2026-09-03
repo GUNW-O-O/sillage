@@ -40,15 +40,15 @@ export default async function AdminOverview() {
     <main className="max-w-[1000px]">
       <h1 className="font-serif text-[26px] text-ink">개요</h1>
       <p className="mt-2 text-[13px] text-muted">
-        등록 폼에서 노트 분류를 뺐으므로 미매핑 raw 가 여기 쌓인다. 처리하는 곳이 여기뿐이고,
-        비워두면 noteSetHash 가 unmapped 토큰으로 남아 동일성 키가 무의미해진다.
+        등록 폼에는 노트 분류가 없어요. 그래서 미매핑 raw 가 여기 쌓이고, 처리하는 곳도 여기뿐이에요.
+        비워두면 noteSetHash 에 unmapped 토큰이 남아 동일성 키가 무의미해져요.
       </p>
 
       <div className="mt-6 grid grid-cols-3 gap-4">
         <Stat
           label="미매핑 노트"
           value={String(s.unmapped)}
-          hint="붙이거나 지운다"
+          hint="붙이거나 지워요"
           href="/admin/unmapped"
           urgent={s.unmapped > 0}
         />

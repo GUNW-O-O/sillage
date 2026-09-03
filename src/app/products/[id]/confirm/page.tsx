@@ -28,7 +28,7 @@ export default async function ConfirmPage({ params }: PageProps<"/products/[id]/
   return (
     <main className="mx-auto w-full max-w-[560px] px-4 py-6">
       <h1 className="font-serif text-[22px] text-ink">
-        {hasRecord ? "이 원두를 다시 볼까요?" : "이것으로 기록을 입력할까요?"}
+        {hasRecord ? "이 원두를 다시 볼까요?" : "이 원두로 기록할까요?"}
       </h1>
 
       <div className="mt-4 rounded-[10px] bg-surface-card p-4">
@@ -51,7 +51,7 @@ export default async function ConfirmPage({ params }: PageProps<"/products/[id]/
 
       {hasRecord && (
         <p className="mt-3 text-[13px] text-muted">
-          이미 기록이 있다. 새로 만들지 않고 그 기록을 고친다.
+          이미 기록이 있어요. 새로 만들지 않고 그 기록을 고쳐요.
         </p>
       )}
 

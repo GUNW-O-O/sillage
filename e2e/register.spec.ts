@@ -19,7 +19,7 @@ const openAdd = async (page: import("@playwright/test").Page) => {
 test("두 글자 미만이면 검색이 안 나간다", async ({ page }) => {
   await openAdd(page);
   await page.getByPlaceholder("로스터리 · 원두 검색").fill("커");
-  await expect(page.getByText("2글자 이상 입력한다")).toBeVisible();
+  await expect(page.getByText("2글자 이상 입력해 주세요")).toBeVisible();
 });
 
 test("로스터리를 안 고르고 원두 이름으로 바로 기록에 간다", async ({ page }) => {
@@ -114,5 +114,5 @@ test("제품명과 노트가 없으면 저장 버튼이 안 눌린다", async ({
 
   await page.goto(`/products/new?vendorId=${vendor.id}`);
   await expect(page.getByRole("button", { name: "등록하고 기록하기" })).toBeDisabled();
-  await expect(page.getByText("제품명과 노트 1개만 있으면 저장된다")).toBeVisible();
+  await expect(page.getByText("제품명과 노트 1개만 있으면 저장돼요")).toBeVisible();
 });

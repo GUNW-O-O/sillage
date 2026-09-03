@@ -211,19 +211,19 @@ function SearchStep({ onPickVendor }: { onPickVendor: (v: VendorHit) => void }) 
 
       {enough && shownVendors.length === 0 && shownProducts.length === 0 && (
         <p className="mt-6 text-[13px] text-muted">
-          찾는 것이 없다. 로스터리를 먼저 만들면 그 안에 원두를 등록할 수 있다.
+          찾는 것이 없어요. 로스터리를 먼저 만들면 그 안에 원두를 등록할 수 있어요.
         </p>
       )}
 
       {trimmed.length === 0 && (
         <p className="mt-6 text-[13px] text-muted">
-          원두 이름으로 바로 찾을 수 있다. 없으면 로스터리부터 만든다.
+          원두 이름으로 바로 찾을 수 있어요. 없으면 로스터리부터 만들어 주세요.
         </p>
       )}
 
       {/* 한 글자에서는 검색이 안 나간다. 아무 반응이 없으면 고장으로 읽히므로 이유를 말한다 */}
       {trimmed.length > 0 && !enough && (
-        <p className="mt-6 text-[13px] text-muted">{MIN_QUERY_LENGTH}글자 이상 입력한다.</p>
+        <p className="mt-6 text-[13px] text-muted">{MIN_QUERY_LENGTH}글자 이상 입력해 주세요.</p>
       )}
     </div>
   );
@@ -284,8 +284,8 @@ function ProductStep({ vendor }: { vendor: VendorHit }) {
         {hits.length === 0 && (
           <p className="mt-6 text-[13px] text-muted">
             {debounced.trim().length > 0
-              ? "이 로스터리에 해당 원두가 없다."
-              : "이 로스터리에 등록된 원두가 없다."}
+              ? "이 로스터리에 찾는 원두가 없어요."
+              : "이 로스터리에 등록된 원두가 없어요."}
           </p>
         )}
       </div>

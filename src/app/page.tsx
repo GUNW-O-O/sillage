@@ -49,9 +49,9 @@ export default async function Home() {
 
       {rows.length === 0 ? (
         <div className="py-10">
-          <p className="text-[16px] text-body">아직 기록이 없다.</p>
+          <p className="text-[16px] text-body">아직 기록이 없어요.</p>
           <p className="mt-2 text-[13px] text-muted">
-            우측 아래 <span className="text-ink">+</span> 로 원두를 찾아 기록을 시작한다.
+            우측 아래 <span className="text-ink">+</span> 로 원두를 찾아 기록을 시작해요.
           </p>
         </div>
       ) : (

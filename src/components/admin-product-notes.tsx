@@ -49,7 +49,7 @@ export function AdminProductNotes() {
       setError(null);
       const r = await fn();
       if (!r.ok) {
-        setError(r.message ?? "실패했다");
+        setError(r.message ?? "실패했어요");
         return;
       }
       if (product) setProduct(await getAdminProduct(product.id));
@@ -99,7 +99,7 @@ export function AdminProductNotes() {
         </button>
       </div>
       {query.trim().length > 0 && query.trim().length < MIN_QUERY_LENGTH && (
-        <p className="mt-2 text-[13px] text-muted">{MIN_QUERY_LENGTH}글자 이상 입력한다.</p>
+        <p className="mt-2 text-[13px] text-muted">{MIN_QUERY_LENGTH}글자 이상 입력해 주세요.</p>
       )}
 
       {hits.length > 0 && (
@@ -129,7 +129,7 @@ export function AdminProductNotes() {
           <p className="mt-1 text-[13px] text-muted">
             기록 {product.sampleSize}명. 노트를 추가하면 그 기록들에{" "}
             <span className="text-ink">못 느낌</span> 으로 들어가고, 기록한 사람이 다음에 열 때
-            보인다.
+            보여요.
           </p>
 
           <table className="mt-4 w-full border-collapse text-left">
@@ -161,13 +161,13 @@ export function AdminProductNotes() {
                       disabled={pending || n.hitCount > 0 || product.notes.length <= 1}
                       title={
                         n.hitCount > 0
-                          ? "판정이 붙어 있다. 표기가 틀린 것이면 원두 화면에서 고쳐 쓴다"
+                          ? "판정이 붙어 있어요. 표기가 틀린 것이면 원두 화면에서 고쳐 쓰세요"
                           : product.notes.length <= 1
-                            ? "마지막 노트는 지울 수 없다"
+                            ? "마지막 노트는 지울 수 없어요"
                             : undefined
                       }
                       onClick={() => {
-                        if (!confirm(`“${n.raw}” 를 지운다.`)) return;
+                        if (!confirm(`“${n.raw}” 를 지울까요?`)) return;
                         run(() => deleteSellerNote(n.id));
                       }}
                       className="inline-flex min-h-9 items-center rounded-[8px] border border-hairline px-3 text-[13px] text-danger disabled:border-hairline-soft disabled:text-muted-soft"

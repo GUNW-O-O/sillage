@@ -24,12 +24,12 @@ export function ProposalQueue({ proposals }: { proposals: AdminNoteProposal[] })
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else router.refresh();
     });
 
   if (proposals.length === 0) {
-    return <p className="text-[15px] text-muted">대기 중인 제안이 없다.</p>;
+    return <p className="text-[15px] text-muted">대기 중인 제안이 없어요.</p>;
   }
 
   return (
@@ -60,7 +60,7 @@ export function ProposalQueue({ proposals }: { proposals: AdminNoteProposal[] })
                   ) : (
                     // 축이 없으면 올려도 unmapped 토큰으로 해시에 들어간다.
                     // 미매핑 큐에서 붙이는 편이 먼저다
-                    <span className="text-pending">미매핑 — 축부터 붙이는 편이 낫다</span>
+                    <span className="text-pending">미매핑 — 축부터 붙이는 편이 나아요</span>
                   )}
                 </div>
               </td>
@@ -82,7 +82,7 @@ export function ProposalQueue({ proposals }: { proposals: AdminNoteProposal[] })
                     type="button"
                     disabled={pending}
                     onClick={() => {
-                      if (!confirm(`“${p.raw}” 제안을 지운다. 동의 ${p.agreeCount}건이 사라진다.`))
+                      if (!confirm(`“${p.raw}” 제안을 지울까요? 동의 ${p.agreeCount}건이 사라져요.`))
                         return;
                       run(() => rejectNoteProposal(p.productId, p.normalizedRaw));
                     }}

@@ -36,7 +36,7 @@ test("목록에서 기록을 열고 판정을 고쳐 저장한다", async ({ pag
   await expect(page.getByText("강함").first()).toBeVisible();
 
   // 수정 모드로 들어가 안 찍힌 노트를 한 번 탭한다 — MISS → UNSURE
-  await clickUntil(icon(page, "수정"), page.getByText("느낀 것만 탭한다"));
+  await clickUntil(icon(page, "수정"), page.getByText("느낀 것만 눌러 주세요"));
   await page.getByRole("button", { name: "청사과" }).click();
   await page.getByRole("button", { name: "저장", exact: true }).click();
 

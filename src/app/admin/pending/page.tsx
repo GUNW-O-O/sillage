@@ -15,8 +15,8 @@ export default async function PendingPage() {
     <main className="max-w-[1000px]">
       <h1 className="font-serif text-[26px] text-ink">승인 대기</h1>
       <p className="mt-2 mb-6 text-[13px] text-muted">
-        등록 중에 인라인으로 추가된 값이다. DB 에 없다는 이유로 기록이 막히면 그날의 기록이
-        사라지므로 일단 받고 여기서 정돈한다. 승인하면 다른 사람 자동완성에도 뜬다.
+        등록 중에 인라인으로 추가된 값이에요. DB 에 없다는 이유로 기록이 막히면 그날의 기록이
+        사라지니까 일단 받고 여기서 정돈해요. 승인하면 다른 사람 자동완성에도 떠요.
       </p>
       <PendingQueue
         vendors={vendors}

@@ -143,7 +143,7 @@ export function ProductDetailFields({
 
       {remaining > 0 && (
         <p className="text-[13px] text-muted">
-          채우면 다음 항목이 나온다. 모르면 건너뛴다. {remaining}개 남음
+          채우면 다음 항목이 나와요. 모르면 건너뛰어도 돼요. {remaining}개 남았어요
         </p>
       )}
 

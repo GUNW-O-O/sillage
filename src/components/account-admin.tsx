@@ -19,7 +19,7 @@ export function AccountAdmin({ accounts, codes }: { accounts: Account[]; codes: 
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else {
         setLabel("");
         router.refresh();
@@ -63,7 +63,7 @@ export function AccountAdmin({ accounts, codes }: { accounts: Account[]; codes: 
       <section>
         <h2 className="mb-3 text-[15px] text-ink">발급한 코드</h2>
         {codes.length === 0 ? (
-          <p className="text-[13px] text-muted">아직 없다.</p>
+          <p className="text-[13px] text-muted">발급한 코드가 없어요.</p>
         ) : (
           <table className="w-full text-[13px]">
             <thead className="text-muted">

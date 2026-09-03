@@ -41,7 +41,7 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else {
         setTarget(null);
         router.refresh();
@@ -49,7 +49,7 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
     });
 
   if (groups.length === 0) {
-    return <p className="text-[15px] text-muted">미매핑 노트가 없다.</p>;
+    return <p className="text-[15px] text-muted">미매핑 노트가 없어요.</p>;
   }
 
   return (
@@ -104,7 +104,7 @@ export function UnmappedQueue({ notes, tree }: { notes: UnmappedNote[]; tree: Tr
                     type="button"
                     disabled={pending}
                     onClick={() => {
-                      if (!confirm(`“${raw}” 를 ${items.length}곳에서 지운다. 되돌릴 수 없다.`)) return;
+                      if (!confirm(`“${raw}” 를 ${items.length}곳에서 지울까요? 되돌릴 수 없어요.`)) return;
                       run(async () => {
                         for (const i of items) {
                           // 판매자 노트는 마지막 하나를 못 지우고 지우면 해시가 재계산된다.
@@ -217,13 +217,13 @@ function AttachModal({
       ) : (
         <div>
           <p className="mb-2 text-[13px] text-muted">
-            기존 어느 축에도 안 들어갈 때만 쓴다. 집계는 Level 2 에서 하므로{" "}
-            <strong className="text-ink">축은 이 표현보다 넓은 이름</strong>이어야 한다 —
-            “그래니스미스”가 아니라 “사과”다.
+            기존 어느 축에도 안 들어갈 때만 써요. 집계는 Level 2 에서 하니까{" "}
+            <strong className="text-ink">축은 이 표현보다 넓은 이름</strong>이어야 해요 —
+            “그래니스미스”가 아니라 “사과”예요.
           </p>
           <p className="mb-3 rounded-[10px] bg-surface-card px-3 py-2 text-[13px] text-body">
             “{raw}” 는 새 축 <strong className="text-ink">{labelKo.trim() || "…"}</strong> 의
-            별칭이 된다. 이 표현 자체가 축이면 같은 이름을 써도 된다.
+            별칭이 돼요. 이 표현 자체가 축이면 같은 이름을 써도 돼요.
           </p>
           <p className="mb-3 text-[12px] text-muted">
             <strong className="text-ink">id 는 집계 축이라 나중에 못 바꾼다.</strong>

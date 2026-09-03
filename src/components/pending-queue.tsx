@@ -54,7 +54,7 @@ export function PendingQueue({
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else {
         setAction(null);
         router.refresh();
@@ -62,7 +62,7 @@ export function PendingQueue({
     });
 
   if (vendors.length === 0 && lookups.length === 0) {
-    return <p className="text-[15px] text-muted">승인 대기 항목이 없다.</p>;
+    return <p className="text-[15px] text-muted">승인 대기 항목이 없어요.</p>;
   }
 
   const Buttons = ({ row }: { row: Row }) => (
@@ -87,7 +87,7 @@ export function PendingQueue({
         type="button"
         disabled={pending}
         onClick={() => {
-          if (!confirm(`“${row.name}” 를 지운다. 이 값을 쓰던 원두에서도 빠진다.`)) return;
+          if (!confirm(`“${row.name}” 를 지울까요? 이 값을 쓰던 원두에서도 빠져요.`)) return;
           run(() => (row.kind === "vendor" ? rejectVendor(row.id) : rejectLookup(row.id)));
         }}
         className="inline-flex min-h-10 items-center rounded-[8px] border border-hairline px-4 text-[14px] text-danger"
@@ -186,8 +186,8 @@ export function PendingQueue({
       {action?.mode === "merge" && (
         <Modal title="어느 값에 흡수할까" subject={action.row.name} onClose={() => setAction(null)}>
           <p className="mb-4 text-[13px] text-muted">
-            “{action.row.name}” 는 고른 값의 별칭이 되고, 이 값을 쓰는 것들은 그쪽으로 갈아탄다.
-            원본은 사라진다.
+            “{action.row.name}” 는 고른 값의 별칭이 되고, 이 값을 쓰는 것들은 그쪽으로 갈아타요.
+            원본은 사라져요.
           </p>
           <div className="flex flex-wrap gap-1.5">
             {mergeOptions.map((o) => (
@@ -266,14 +266,14 @@ function ApproveModal({
           </label>
           {renamed && (
             <p className="mb-3 text-[12px] text-muted">
-              원래 표기 “{row.name}” 는 별칭으로 남는다.
+              원래 표기 “{row.name}” 는 별칭으로 남아요.
             </p>
           )}
         </>
       )}
 
       <p className="mb-3 text-[13px] text-muted">
-        같은 것을 가리키는 다른 표기를 함께 적어둔다. 다음에 그 표기로 들어와도 갈라지지 않는다.
+        같은 것을 가리키는 다른 표기를 함께 적어 두세요. 다음에 그 표기로 들어와도 갈라지지 않아요.
       </p>
 
       {aliases.length > 0 && (

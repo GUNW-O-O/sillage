@@ -104,7 +104,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
 
   const remove = () =>
     startTransition(async () => {
-      if (!confirm("이 기록을 지운다. 판정이 함께 사라진다.")) return;
+      if (!confirm("이 기록을 지울까요? 판정이 함께 사라져요.")) return;
       await deleteRecord(productId);
       onClose();
       router.refresh();
@@ -140,7 +140,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           {!detail ? (
-            <p className="py-10 text-center text-[14px] text-muted">불러오는 중</p>
+            <p className="py-10 text-center text-[14px] text-muted">불러오는 중이에요</p>
           ) : (
             <>
               <div className="pt-4">
@@ -190,7 +190,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
               </div>
               {editing && (
                 <p className="mt-1 text-[13px] text-muted">
-                  느낀 것만 탭한다. 안 건드린 노트는 <span className="text-ink">못 느낌</span> 이다.
+                  느낀 것만 눌러 주세요. 안 건드린 노트는 <span className="text-ink">못 느낌</span> 이 돼요.
                 </p>
               )}
 

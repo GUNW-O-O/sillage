@@ -49,8 +49,8 @@ export default async function LookupsPage() {
     <main className="max-w-[1000px]">
       <h1 className="font-serif text-[26px] text-ink">품종 · 가공</h1>
       <p className="mt-2 text-[13px] text-muted">
-        롱테일이 실재하는 축이다. 닫힌 목록으로 두면 반드시 막히므로 인라인 추가를 열어두고
-        여기서 정돈한다 (설계 4-8). 나라는 ISO 닫힌 집합이라 추가하지 않는다.
+        롱테일이 실재하는 축이에요. 닫힌 목록으로 두면 반드시 막히니까 인라인 추가를 열어두고
+        여기서 정돈해요. 나라는 ISO 닫힌 집합이라 추가하지 않아요.
       </p>
 
       <section className="mt-8">

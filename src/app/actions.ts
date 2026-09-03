@@ -297,9 +297,9 @@ export async function createProduct(input: CreateProductInput): Promise<CreatePr
     .map((n) => ({ raw: n.raw.trim(), nodeId: n.nodeId }))
     .filter((n) => n.raw.length > 0);
 
-  if (!normalizedName) return { ok: false, reason: "invalid", message: "제품명을 적어달라" };
+  if (!normalizedName) return { ok: false, reason: "invalid", message: "제품명을 적어 주세요" };
   // 노트가 없으면 대조할 것이 없어 엔진 입력이 0이다 (설계 4-3)
-  if (notes.length === 0) return { ok: false, reason: "invalid", message: "판매자 노트가 최소 1개 필요하다" };
+  if (notes.length === 0) return { ok: false, reason: "invalid", message: "판매자 노트가 최소 1개 필요해요" };
 
   const noteSetHash = computeNoteSetHash(notes);
 
@@ -491,13 +491,13 @@ export async function proposeSellerNote(
 ): Promise<AdminResult> {
   const trimmed = raw.trim();
   const normalizedRaw = normalizeName(trimmed);
-  if (!normalizedRaw) return { ok: false, message: "노트가 비어 있다" };
+  if (!normalizedRaw) return { ok: false, message: "노트가 비어 있어요" };
 
   const exists = await prisma.sellerNote.findFirst({
     where: { productId, raw: trimmed },
     select: { id: true },
   });
-  if (exists) return { ok: false, message: "이미 이 원두의 노트다" };
+  if (exists) return { ok: false, message: "이미 이 원두의 노트예요" };
 
   await prisma.sellerNoteProposal.upsert({
     where: {
@@ -1015,7 +1015,7 @@ export async function mergeLookup(sourceId: string, targetId: string): Promise<A
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
-  if (sourceId === targetId) return { ok: false, message: "같은 항목이다" };
+  if (sourceId === targetId) return { ok: false, message: "같은 항목이에요" };
 
   return prisma
     .$transaction(async (tx) => {
@@ -1119,7 +1119,7 @@ export async function mergeVendor(sourceId: string, targetId: string): Promise<A
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
-  if (sourceId === targetId) return { ok: false, message: "같은 로스터리다" };
+  if (sourceId === targetId) return { ok: false, message: "같은 로스터리예요" };
 
   return prisma
     .$transaction(async (tx) => {
@@ -1204,14 +1204,14 @@ export async function createFlavorNodeL2(
   const ko = labelKo.trim();
   const en = labelEn.trim();
   const id = slugify(en);
-  if (!ko || !en) return { ok: false, message: "한글 · 영문 라벨이 둘 다 필요하다" };
-  if (!id) return { ok: false, message: "영문 라벨에서 id 를 만들 수 없다" };
+  if (!ko || !en) return { ok: false, message: "한글 · 영문 라벨이 둘 다 필요해요" };
+  if (!id) return { ok: false, message: "영문 라벨에서 id 를 만들 수 없어요" };
 
   const parent = await prisma.flavorNode.findUnique({
     where: { id: parentId },
     select: { level: true },
   });
-  if (!parent || parent.level !== 1) return { ok: false, message: "부모는 Level 1 이어야 한다" };
+  if (!parent || parent.level !== 1) return { ok: false, message: "부모는 Level 1 이어야 해요" };
   if (await prisma.flavorNode.findUnique({ where: { id }, select: { id: true } })) {
     return { ok: false, message: `id "${id}" 가 이미 있다` };
   }
@@ -1238,7 +1238,7 @@ export async function createLookupApproved(
   }
   const ko = nameKo.trim();
   const normalizedName = normalizeName(ko);
-  if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
+  if (!normalizedName) return { ok: false, message: "이름이 비어 있어요" };
 
   const dup = await prisma.lookupValue.findUnique({
     where: { kind_normalizedName: { kind, normalizedName } },
@@ -1273,7 +1273,7 @@ export async function createVendorApproved(
   }
   const trimmed = name.trim();
   const normalizedName = normalizeName(trimmed);
-  if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
+  if (!normalizedName) return { ok: false, message: "이름이 비어 있어요" };
 
   const dup = await prisma.vendor.findUnique({
     where: { normalizedName },
@@ -1360,7 +1360,7 @@ export async function approveLookupEdited(
   }
   const ko = nameKo.trim();
   const normalizedName = normalizeName(ko);
-  if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
+  if (!normalizedName) return { ok: false, message: "이름이 비어 있어요" };
 
   const current = await prisma.lookupValue.findUniqueOrThrow({
     where: { id },
@@ -1687,7 +1687,7 @@ export async function addSellerNote(
     return { ok: false, message: (e as Error).message };
   }
   const trimmed = raw.trim();
-  if (!trimmed) return { ok: false, message: "노트가 비어 있다" };
+  if (!trimmed) return { ok: false, message: "노트가 비어 있어요" };
 
   return prisma
     .$transaction(async (tx) => {
@@ -1725,7 +1725,7 @@ export async function updateSellerNote(
   nodeId: string | null,
 ): Promise<AdminResult> {
   const trimmed = raw.trim();
-  if (!trimmed) return { ok: false, message: "노트가 비어 있다" };
+  if (!trimmed) return { ok: false, message: "노트가 비어 있어요" };
 
   return prisma
     .$transaction(async (tx) => {
@@ -1789,7 +1789,7 @@ export async function deleteSellerNote(sellerNoteId: string): Promise<AdminResul
 export async function updateProductName(productId: string, name: string): Promise<AdminResult> {
   const trimmed = name.trim();
   const normalizedName = normalizeName(trimmed);
-  if (!normalizedName) return { ok: false, message: "제품명이 비어 있다" };
+  if (!normalizedName) return { ok: false, message: "제품명이 비어 있어요" };
 
   const current = await prisma.product.findUniqueOrThrow({
     where: { id: productId },
@@ -1976,7 +1976,7 @@ export async function issueInviteCode(label: string): Promise<AdminResult> {
     return { ok: false, message: (e as Error).message };
   }
   const trimmed = label.trim();
-  if (!trimmed) return { ok: false, message: "누구에게 주는 코드인지 적는다" };
+  if (!trimmed) return { ok: false, message: "누구에게 주는 코드인지 적어 주세요" };
 
   const issuer = await currentUserId();
   // code 가 unique 라 100만 분의 1로 부딪힌다. 세 번까지 다시 뽑는다 —
@@ -1997,7 +1997,7 @@ export async function issueInviteCode(label: string): Promise<AdminResult> {
       throw e;
     }
   }
-  return { ok: false, message: "코드가 계속 겹친다. 다시 시도한다" };
+  return { ok: false, message: "코드가 계속 겹쳐요. 다시 눌러 주세요" };
 }
 
 /// 만료는 지우지 않고 표시만 한다. **언제 누구에게 뭘 발급했는지가 기록이다.**
@@ -2032,8 +2032,8 @@ export async function revokeInviteCode(id: string): Promise<AdminResult> {
     where: { id },
     select: { usedByUserId: true },
   });
-  if (!row) return { ok: false, message: "없는 코드다" };
-  if (row.usedByUserId) return { ok: false, message: "이미 쓴 코드는 못 지운다" };
+  if (!row) return { ok: false, message: "없는 코드예요" };
+  if (row.usedByUserId) return { ok: false, message: "이미 쓴 코드는 못 지워요" };
   await prisma.inviteCode.delete({ where: { id } });
   return { ok: true };
 }

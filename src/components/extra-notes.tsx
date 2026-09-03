@@ -22,7 +22,7 @@ export function ExtraNotes({
     <section className="mt-8">
       <h3 className="text-[15px] font-semibold text-ink">내가 느낀 향</h3>
       <p className="mt-1 text-[13px] text-muted">
-        판매자가 안 적었는데 느낀 것만 적는다. 위 노트를 더 잘게 쪼개는 자리가 아니다.
+        판매자가 안 적었는데 느낀 것만 적어 주세요. 위 노트를 더 잘게 쪼개는 자리가 아니에요.
       </p>
 
       {editable && onChange ? (
@@ -45,7 +45,7 @@ export function ExtraNotes({
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-[13px] text-muted-soft">적은 것이 없다.</p>
+        <p className="mt-3 text-[13px] text-muted-soft">적은 것이 없어요.</p>
       )}
     </section>
   );

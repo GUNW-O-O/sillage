@@ -36,7 +36,7 @@ export function NoteProposals({
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else router.refresh();
     });
 
@@ -58,8 +58,8 @@ export function NoteProposals({
     <section className="mt-8">
       <h2 className="text-[16px] font-semibold text-ink">빠진 노트 제안</h2>
       <p className="mt-1 text-[13px] text-muted">
-        봉투에 있는데 여기 없는 노트를 적는다. <span className="text-ink">내가 느낀 향이
-        아니다</span> — 그건 기록 화면에서 적는다. 제안은 어드민이 확인한 뒤 노트가 된다.
+        봉투에 있는데 여기 없는 노트를 적어 주세요. <span className="text-ink">내가 느낀 향은
+        아니에요</span> — 그건 기록 화면에서 적어요. 제안은 어드민이 확인한 뒤 노트가 돼요.
       </p>
 
       {error && (

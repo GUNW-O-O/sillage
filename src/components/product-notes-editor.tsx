@@ -55,7 +55,7 @@ export function ProductNotesEditor({
     startTransition(async () => {
       setError(null);
       const r = await fn();
-      if (!r.ok) setError(r.message ?? "실패했다");
+      if (!r.ok) setError(r.message ?? "실패했어요");
       else router.refresh();
     });
 
@@ -82,8 +82,8 @@ export function ProductNotesEditor({
           그래서 표본 수를 늘 함께 보여주고 비율을 단독으로 결론처럼 쓰지 않는다 (설계 7-3) */}
       <p className="mt-0.5 text-[13px] text-muted">
         {sampleSize === 0
-          ? "아직 아무도 기록하지 않았다."
-          : `기록 ${sampleSize}명 기준. 표본이 적으면 비율은 그 사람의 판정일 뿐이다.`}
+          ? "아직 아무도 기록하지 않았어요."
+          : `기록 ${sampleSize}명 기준이에요. 표본이 적으면 비율은 그 사람의 판정일 뿐이에요.`}
       </p>
 
       {error && (
@@ -189,9 +189,9 @@ export function ProductNotesEditor({
       {editing && (
         <div className="mt-6 space-y-4">
           <p className="text-[12px] text-muted">
-            표기가 틀린 노트는 고쳐서 쓴다. <span className="text-ink">노트 추가 · 삭제</span>
-            는 어드민에서 한다 — 추가한 노트는 남이 이미 남긴 기록에도{" "}
-            <span className="text-ink">못 느낌</span> 으로 들어간다.
+            표기가 틀린 노트는 고쳐서 써요. <span className="text-ink">노트 추가 · 삭제</span>
+            는 어드민에서 해요 — 추가한 노트는 남이 이미 남긴 기록에도{" "}
+            <span className="text-ink">못 느낌</span> 으로 들어가거든요.
           </p>
 
           <div>

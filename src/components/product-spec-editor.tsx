@@ -97,7 +97,7 @@ export function ProductSpecEditor({
       ) : (
         // 등록할 때 상세를 안 채우면 여기가 빈다. 빈 박스를 감추면 고칠 입구도 같이 사라진다
         <p className="mt-1 text-[13px] text-muted">
-          채운 정보가 없다. 나라 · 가공을 채우면 나중에 그룹별 비교에 나타난다.
+          채운 정보가 없어요. 나라 · 가공을 채우면 나중에 그룹별 비교에 나와요.
         </p>
       )}
     </section>

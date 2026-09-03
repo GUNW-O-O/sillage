@@ -70,7 +70,7 @@ export function NoteCycle({
 
   const remove = () =>
     startTransition(async () => {
-      if (!confirm("이 기록을 지운다. 판정이 함께 사라진다.")) return;
+      if (!confirm("이 기록을 지울까요? 판정이 함께 사라져요.")) return;
       await deleteRecord(productId);
       router.push("/");
     });
@@ -85,7 +85,7 @@ export function NoteCycle({
         </span>
       </div>
       <p className="mt-1 text-[13px] text-muted">
-        느낀 것만 탭한다. 안 건드린 노트는 <span className="text-ink">못 느낌</span> 이다.
+        느낀 것만 눌러 주세요. 안 건드린 노트는 <span className="text-ink">못 느낌</span> 이 돼요.
       </p>
 
       <ul className="mt-4 flex flex-wrap gap-2">

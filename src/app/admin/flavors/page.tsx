@@ -18,9 +18,9 @@ export default async function FlavorsPage() {
     <main className="max-w-[1100px]">
       <h1 className="font-serif text-[26px] text-ink">향 계층</h1>
       <p className="mt-2 text-[13px] text-muted">
-        집계는 Level 2 에서 한다. 어느 표현이 어느 축에 앉았는지가 여기 다 보인다 —
-        잘못 붙인 것을 찾는 방법이 이것뿐이다. 표현을 누르면 다른 축으로 옮기거나
-        매핑을 지워 미매핑 큐로 되돌린다.
+        집계는 Level 2 에서 해요. 어느 표현이 어느 축에 앉았는지가 여기 다 보여요 —
+        잘못 붙인 것을 찾는 방법은 이것뿐이에요. 표현을 누르면 다른 축으로 옮기거나
+        매핑을 지워 미매핑 큐로 되돌릴 수 있어요.
       </p>
       <p className="mt-1 mb-6 text-[13px] text-muted">
         매핑된 노트 <span className="tabular text-ink">{total}</span> · 아직 안 쓰인 축{" "}

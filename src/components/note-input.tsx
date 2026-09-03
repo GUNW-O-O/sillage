@@ -115,7 +115,7 @@ export function NoteChips({
           className="mt-1 flex min-h-12 w-full items-center rounded-[10px] border border-dashed border-hairline px-4 text-left text-[15px] text-ink"
         >
           + “{query.trim()}” 그대로 담기
-          <span className="ml-2 text-[12px] text-muted">나중에 분류한다</span>
+          <span className="ml-2 text-[12px] text-muted">나중에 분류돼요</span>
         </button>
       )}
     </div>

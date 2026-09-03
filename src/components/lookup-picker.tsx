@@ -136,7 +136,7 @@ export function LookupPicker({
           className="mt-2 flex min-h-12 w-full items-center rounded-[10px] border border-dashed border-hairline px-[14px] text-left text-[15px] text-ink"
         >
           + “{trimmed}” 추가
-          <span className="ml-2 text-[12px] text-muted">승인 대기로 들어간다</span>
+          <span className="ml-2 text-[12px] text-muted">승인 대기로 들어가요</span>
         </button>
       )}
     </div>

@@ -45,7 +45,7 @@ export function ProductForm({
     JSON.stringify(pruneAttributes(attrs)) !== JSON.stringify(pruneAttributes(EMPTY_COFFEE_ATTRIBUTES));
 
   const cancel = () => {
-    if (dirty && !confirm("입력한 것을 버리고 나간다.")) return;
+    if (dirty && !confirm("입력한 것을 버리고 나갈까요?")) return;
     // 여기까지 온 경로는 시트였고 그 상태는 이미 사라졌다. 목록이 정직한 도착지다
     router.push("/");
   };
@@ -103,7 +103,7 @@ export function ProductForm({
       </button>
       {!detailOpen && (
         <p className="mt-2 text-[13px] text-muted">
-          나라 · 가공을 채우면 나중에 그룹별 비교에 나타난다. 아는 것만 채우면 된다.
+          나라 · 가공을 채우면 나중에 그룹별 비교에 나와요. 아는 것만 채워도 돼요.
         </p>
       )}
 
@@ -114,7 +114,7 @@ export function ProductForm({
       {duplicate && (
         <div className="mt-4 rounded-[10px] border border-hairline bg-surface-card p-4">
           <p className="text-[15px] text-ink">
-            같은 로스터리에 같은 이름 · 같은 노트 집합의 원두가 이미 있다.
+            같은 로스터리에 같은 이름 · 같은 노트의 원두가 이미 있어요.
           </p>
           <p className="mt-1 text-[13px] text-muted">{duplicate.productName}</p>
           <button
@@ -151,7 +151,7 @@ export function ProductForm({
           </div>
           {!ready && (
             <p className="mt-2 text-center text-[12px] text-muted">
-              제품명과 노트 1개만 있으면 저장된다
+              제품명과 노트 1개만 있으면 저장돼요
             </p>
           )}
         </div>
