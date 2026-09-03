@@ -50,9 +50,14 @@ function firstStatementLines(name: string, count: number): string[] {
 
 it.each(ADMIN_ACTIONS)("%s 가 requireAdmin 을 앞 3개 문장 줄 안에서 부른다", (name) => {
   const lines = firstStatementLines(name, 3);
-  // toContain 이 실패하면 vitest 가 받은 값(= 실제 앞 문장 줄)을 그대로 출력한다 —
+  // **줄 하나와 통째로 같아야 한다.** 이어붙인 문자열에 `toContain` 을 걸면
+  // `if (process.env.NODE_ENV === "production") await requireAdmin();` 같은 조건부 가드도
+  // 통과한다 — 조건이 안 맞는 환경에서는 가드가 아예 없는 것과 같다.
+  // 배열에 거는 `toContain` 은 원소 전체가 일치해야 하므로 그 형태가 걸린다.
+  //
+  // 실패하면 vitest 가 받은 값(= 실제 앞 문장 줄)을 그대로 출력한다 —
   // 다음 사람이 왜 실패했는지 그 자리에서 본다
-  expect(lines.join("\n")).toContain("await requireAdmin();");
+  expect(lines).toContain("await requireAdmin();");
 });
 
 // **가드가 있느냐 다음으로, 실패가 어떤 모양으로 나가느냐를 본다.**

@@ -92,6 +92,29 @@ export async function clickUntilDb(target: Locator, done: () => Promise<boolean>
   }).toPass({ timeout: 20_000 });
 }
 
+/// 입력하고 누르되, **재시도 여부를 DB 로 판단한다.**
+///
+/// `typeAndClick` 은 화면에 결과가 뜰 때까지 다시 누른다. 그런데 그 조작이 멱등이 아니면
+/// 재시도가 **같은 것을 하나 더 만든다** — 초대 코드 발급이 그렇다. 같은 label 로 두 장이
+/// 생기면 그 다음 단정이 strict mode 위반으로 죽고, 원인은 화면이 아니라 재시도에 있다.
+/// 화면이 갱신되기까지는 렌더와 `router.refresh()` 를 기다려야 하지만 DB 는 액션이
+/// 끝나는 순간 바뀐다 — 그래서 다시 누를지 말지는 DB 에 물어보는 것이 좁다.
+export async function typeAndClickUntilDb(
+  page: Page,
+  placeholder: string,
+  text: string,
+  button: string,
+  done: () => Promise<boolean>,
+) {
+  await expect(async () => {
+    if (await done()) return;
+    await typeInto(page, placeholder, text);
+    await page.getByRole("button", { name: button, exact: true }).click({ timeout: 2000 });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(await done(), "DB 가 아직 안 바뀌었다").toBe(true);
+  }).toPass({ timeout: 20_000 });
+}
+
 /// 시트 안이라는 것을 무엇으로 아나 — 목록에는 없는 닫기 버튼이다.
 /// 문구로 판단하면 안 된다: 목록에도 `느낀 노트 / 판매자 노트` 가 있어
 /// 시트가 안 열렸는데 열린 줄 알고 통과했다
