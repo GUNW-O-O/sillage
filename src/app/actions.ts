@@ -908,7 +908,11 @@ export async function deleteNote(sellerNoteId: string): Promise<AdminResult> {
 /// 동일성 키 밖이라 해시가 안 움직이고, 마지막 하나를 지켜야 할 이유도 없다
 /// (판매자 노트가 0개면 대조할 주장이 없어지지만, 이건 부가 항목이다).
 export async function deleteExtraNote(extraNoteId: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   // `deleteNote` 와 마찬가지로 revalidatePath 를 안 부른다 — 이 항목은 목록 화면에
   // 안 나오고, 큐 화면은 스스로 router.refresh() 한다
   await prisma.extraNote.delete({ where: { id: extraNoteId } });
@@ -981,14 +985,22 @@ export async function listPending() {
 }
 
 export async function approveVendor(id: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   await prisma.vendor.update({ where: { id }, data: { status: VendorStatus.APPROVED } });
   revalidate("/admin");
   return { ok: true };
 }
 
 export async function approveLookup(id: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   await prisma.lookupValue.update({ where: { id }, data: { status: LookupStatus.APPROVED } });
   revalidate("/admin");
   return { ok: true };
@@ -1070,7 +1082,11 @@ export async function listLookupsByKind(kind: LookupKind) {
 /// 승인하면서 별칭을 같이 받는다. 표기 흔들림을 흡수하는 경로가 aliases 뿐이라
 /// 승인 시점이 그걸 적어둘 유일한 자리다 (설계 4-2 · 4-8).
 export async function approveLookupWith(id: string, aliases: string[]): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
   await prisma.lookupValue.update({
     where: { id },
@@ -1081,7 +1097,11 @@ export async function approveLookupWith(id: string, aliases: string[]): Promise<
 }
 
 export async function approveVendorWith(id: string, aliases: string[]): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const clean = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
   await prisma.vendor.update({
     where: { id },
@@ -1176,7 +1196,11 @@ export async function createFlavorNodeL2(
   labelKo: string,
   labelEn: string,
 ): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const ko = labelKo.trim();
   const en = labelEn.trim();
   const id = slugify(en);
@@ -1207,7 +1231,11 @@ export async function createLookupApproved(
   nameEn: string,
   aliases: string[],
 ): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const ko = nameKo.trim();
   const normalizedName = normalizeName(ko);
   if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
@@ -1238,7 +1266,11 @@ export async function createVendorApproved(
   name: string,
   aliases: string[],
 ): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const trimmed = name.trim();
   const normalizedName = normalizeName(trimmed);
   if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
@@ -1302,7 +1334,11 @@ export async function createNodeAndAttach(
   labelKo: string,
   labelEn: string,
 ): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const created = await createFlavorNodeL2(parentId, labelKo, labelEn);
   if (!created.ok) return created;
   return attachNote(raw, slugify(labelEn));
@@ -1317,7 +1353,11 @@ export async function approveLookupEdited(
   nameEn: string,
   aliases: string[],
 ): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const ko = nameKo.trim();
   const normalizedName = normalizeName(ko);
   if (!normalizedName) return { ok: false, message: "이름이 비어 있다" };
@@ -1399,7 +1439,11 @@ export async function rejectLookup(id: string): Promise<AdminResult> {
 /// 로스터리는 원두가 붙어 있으면 못 지운다. 지우면 그 원두들이 갈 곳이 없다 —
 /// 그런 경우는 삭제가 아니라 흡수다.
 export async function rejectVendor(id: string): Promise<AdminResult> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
   const count = await prisma.product.count({ where: { vendorId: id } });
   if (count > 0) {
     return { ok: false, message: `원두 ${count}개가 붙어 있다. 흡수를 써달라` };
