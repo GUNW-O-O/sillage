@@ -1,12 +1,16 @@
 import { cache } from "react";
 
 import { prisma } from "../db";
+import { authBypassed } from "./bypass";
 import { readSession } from "./session";
 
 export type SessionUser = { id: string; displayName: string; role: "USER" | "ADMIN" };
 
-/// **1차 한정 폴백의 대상.** 로그인 화면이 아직 없다 (요구 FR-10 · 설계 3-4).
-/// 2차에서 이 상수와 아래 `?? SEED_ADMIN_ID` 를 함께 지운다.
+/// 로그인 게이트를 끈 로컬 개발에서 누가 되는가 (설계 10-1).
+///
+/// 1차에는 이 폴백이 **무조건** 걸렸고 2차에서 지울 예정이었다. 지우는 대신
+/// `authBypassed()` 뒤로 옮겼다 — 그 한 줄 덕에 `scripts/check-*.ts` 7개와 e2e 24건이
+/// 세션 없이도 지금 모습 그대로 돈다. 배포에서는 스위치를 안 보므로 폴백이 없다.
 export const SEED_ADMIN_ID = "seed-admin";
 
 /// **요청 하나 안에서는 한 번만 조회한다.** `await` 이 붙으면서 공짜 상수였던 것이
@@ -17,8 +21,10 @@ export const SEED_ADMIN_ID = "seed-admin";
 /// `cache()` 는 React 요청 밖(= `scripts/check-*.ts` 의 Node 실행)에서는 그냥 캐시가
 /// 안 걸릴 뿐 던지지 않는다. 그쪽 동작은 그대로다.
 export const currentUser = cache(async function currentUser(): Promise<SessionUser | null> {
-  // 2차에서 `?? SEED_ADMIN_ID` 만 지우면 이 함수는 그대로 쓴다
-  const userId = (await readSession()) ?? SEED_ADMIN_ID;
+  // **분기가 여기 한 곳뿐이다.** 로그인 게이트도 어드민 가드 34개도 전부 이 함수 위에
+  // 서므로, 스위치를 여기서만 보면 호출부 · 검사 스크립트 · e2e 가 손댈 것이 없다 (설계 10-1)
+  const userId = (await readSession()) ?? (authBypassed() ? SEED_ADMIN_ID : null);
+  if (!userId) return null;
   return prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, displayName: true, role: true },

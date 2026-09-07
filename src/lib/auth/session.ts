@@ -1,9 +1,12 @@
 import { cookies } from "next/headers";
 import { unstable_rethrow } from "next/navigation";
 
-import { SESSION_MAX_AGE_SEC, signSessionToken, verifySessionToken } from "./token";
-
-export const SESSION_COOKIE = "sillage_session";
+import {
+  SESSION_COOKIE,
+  SESSION_MAX_AGE_SEC,
+  signSessionToken,
+  verifySessionToken,
+} from "./token";
 
 export async function issueSession(userId: string): Promise<void> {
   const jar = await cookies();

@@ -2,6 +2,12 @@ import { SignJWT, jwtVerify } from "jose";
 
 const ALG = "HS256";
 
+/// 쿠키 이름. **`session.ts` 가 아니라 여기 둔다** — `proxy.ts` 는 edge 에서 돌아
+/// `next/headers` 를 쓰는 `session.ts` 를 못 끌어온다. 이름을 양쪽에 하나씩 적으면
+/// 한쪽만 바뀌었을 때 "로그인은 됐는데 게이트가 못 알아본다" 가 조용히 생긴다.
+/// 이 파일이 세션 계약 중 **의존성 없는 부분**을 모으는 자리다 (`SESSION_MAX_AGE_SEC` 도 그렇다).
+export const SESSION_COOKIE = "sillage_session";
+
 /// 90일 (요구 FR-10). **쿠키 maxAge 와 같은 값을 쓴다** — 어긋나면 쿠키는 살아 있는데
 /// 검증만 실패하는, 로그인도 로그아웃도 아닌 상태가 생긴다.
 export const SESSION_MAX_AGE_SEC = 90 * 24 * 60 * 60;
