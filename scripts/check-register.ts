@@ -4,6 +4,7 @@ import { Category, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
+import { createLookup } from "../src/app/actions";
 import { computeNoteSetHash } from "../src/lib/note-set-hash";
 import { normalizeName } from "../src/lib/normalize";
 
@@ -108,11 +109,46 @@ async function main() {
   ok(top[0] === "에티오피아", `국가 목록 첫 줄이 산지다 (${top.join(" ")})`);
   ok(!top.includes("가나"), "가나다순 상위가 밀려난다");
 
+  await checkLookupDuplicates();
+
   await prisma.product.deleteMany({ where: { name: { startsWith: "[검증]" } } });
   if (failed > 0) {
     console.error(`\n${failed}건 실패`);
     process.exitCode = 1;
   }
+}
+
+/// 인라인 추가가 **이미 있는 것을 다른 표기로 다시 만들지 않는가.**
+///
+/// `@@unique([kind, normalizedName])` 은 nameKo 에서 나온 값 하나만 보므로 이 경우를
+/// 원리적으로 못 막는다 — 그래서 DB 층에 둔다. 규칙 자체는 `lookup-match.test.ts` 가 보고,
+/// 여기서는 **행이 정말 안 늘어나는지**를 본다.
+///
+/// 실제로 `워시드`(nameEn: Washed) 옆에 `Washed` 가 따로 앉아 있었다.
+async function checkLookupDuplicates() {
+  const before = await prisma.lookupValue.count({ where: { kind: "PROCESS" } });
+
+  const seeded = await prisma.lookupValue.findFirstOrThrow({
+    where: { kind: "PROCESS", nameKo: "워시드" },
+    select: { id: true, nameEn: true, aliases: true },
+  });
+
+  // 영문 이름 · 대소문자 · 별칭 — 셋 다 기존 행으로 되돌아와야 한다
+  for (const typed of [seeded.nameEn!, seeded.nameEn!.toLowerCase(), seeded.aliases[0], "  워시드 "]) {
+    const got = await createLookup("PROCESS", typed);
+    ok(got.id === seeded.id, `"${typed}" 를 추가하면 기존 워시드가 돌아온다`);
+  }
+
+  ok(
+    (await prisma.lookupValue.count({ where: { kind: "PROCESS" } })) === before,
+    "네 번을 눌러도 PROCESS 행이 안 늘어난다",
+  );
+
+  // 반대쪽 — 진짜 새 값은 여전히 들어가야 한다. 여기가 막히면 설계 4-8 이 깨진다
+  const fresh = `[검증] 가공${Date.now()}`;
+  const created = await createLookup("PROCESS", fresh);
+  ok(created.nameKo === fresh && created.status === "PENDING", "새 표기는 그대로 추가된다");
+  await prisma.lookupValue.deleteMany({ where: { id: created.id } });
 }
 
 main()

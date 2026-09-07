@@ -24,6 +24,7 @@ import {
   isLockedOut,
 } from "@/lib/auth/invite-code";
 import { issueSession } from "@/lib/auth/session";
+import { findExistingLookup } from "@/lib/lookup-match";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
 import { normalizeName } from "@/lib/normalize";
 import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
@@ -215,7 +216,15 @@ export async function searchNoteSuggestions(query: string): Promise<NoteSuggesti
   return out.slice(0, 8);
 }
 
-export type LookupOption = { id: string; nameKo: string; status: LookupStatus };
+/// **`nameEn` 을 같이 내린다.** 「Geisha」를 쳤는데 목록에 「게이샤」만 뜨면 그것이
+/// 내가 찾던 것인지 알 수 없어 옆의 「추가」를 누르게 된다 — 중복이 그렇게 생겼다.
+/// 화면은 검색 결과에서만 둘을 나란히 보여준다 (고른 뒤의 칩은 한글만, 폰 폭 때문이다)
+export type LookupOption = {
+  id: string;
+  nameKo: string;
+  nameEn: string | null;
+  status: LookupStatus;
+};
 
 /// sortWeight 가 큰 것부터. 커피 산지를 목록 위로 올리는 자리다 (설계 4-8).
 
@@ -227,7 +236,7 @@ export async function getLookupsByIds(ids: string[]): Promise<LookupOption[]> {
   if (ids.length === 0) return [];
   return prisma.lookupValue.findMany({
     where: { id: { in: ids } },
-    select: { id: true, nameKo: true, status: true },
+    select: { id: true, nameKo: true, nameEn: true, status: true },
   });
 }
 
@@ -249,7 +258,7 @@ export async function searchLookups(
           }
         : {}),
     },
-    select: { id: true, nameKo: true, status: true },
+    select: { id: true, nameKo: true, nameEn: true, status: true },
     orderBy: [{ sortWeight: "desc" }, { status: "asc" }, { nameKo: "asc" }],
     take: q ? 12 : 60,
   });
@@ -257,6 +266,15 @@ export async function searchLookups(
 
 /// lookup 에 값이 없다는 이유로 기록이 막히면 안 된다 (설계 4-8).
 /// country 는 닫힌 집합이라 막는다.
+///
+/// **이미 있는 것을 다른 표기로 다시 만들지 않는다.** `@@unique([kind, normalizedName])` 은
+/// `nameKo` 에서 나온 값 하나만 보므로 "게이샤" 가 있어도 "Geisha" 가 그냥 들어온다 —
+/// 실제로 `워시드`(nameEn: Washed) 옆에 `Washed` 가 따로 앉아 있었다.
+/// 영문 이름과 별칭까지 접어서 대조하고, 맞으면 **만들지 않고 그 행을 돌려준다**
+/// (`lookup-match.ts`).
+///
+/// **화면의 「추가」 버튼을 감추는 것으로는 안 막힌다** — 서버 액션은 경로만 알면
+/// 요청이 들어오는 공개 엔드포인트다 (설계 4-1 과 같은 이유).
 export async function createLookup(
   kind: "VARIETY" | "PROCESS",
   nameKo: string,
@@ -265,6 +283,19 @@ export async function createLookup(
   const normalizedName = normalizeName(trimmed);
   if (!normalizedName) throw new Error("이름이 비어 있다");
 
+  // 같은 kind 를 통째로 읽는다. 품종 40 · 가공 20 개고 인라인 추가는 드문 조작이라 싸다
+  const rows = await prisma.lookupValue.findMany({
+    where: { kind },
+    select: { id: true, nameKo: true, nameEn: true, aliases: true, status: true },
+  });
+  const existing = findExistingLookup(rows, trimmed);
+  if (existing) {
+    const { id, nameKo: ko, nameEn, status } = existing;
+    return { id, nameKo: ko, nameEn, status };
+  }
+
+  // upsert 를 남겨 둔다. 위 대조와 이 쓰기 사이에 남이 **같은 표기로** 넣을 수 있는데,
+  // 그 경우는 normalizedName 이 같으므로 DB 가 막고 기존 행이 돌아온다
   return prisma.lookupValue.upsert({
     where: { kind_normalizedName: { kind, normalizedName } },
     update: {},
@@ -275,7 +306,7 @@ export async function createLookup(
       status: LookupStatus.PENDING,
       createdById: await currentUserId(),
     },
-    select: { id: true, nameKo: true, status: true },
+    select: { id: true, nameKo: true, nameEn: true, status: true },
   });
 }
 

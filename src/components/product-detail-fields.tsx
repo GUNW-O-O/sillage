@@ -188,7 +188,6 @@ function FieldBody({
       return (
         <LookupPicker
           kind="COUNTRY"
-          label=""
           multiple={blend}
           selected={blend ? (attrs.countryIds ?? []) : attrs.countryId ? [attrs.countryId] : []}
           onChange={(ids) => (blend ? set("countryIds", ids) : set("countryId", ids[0]))}
@@ -199,7 +198,6 @@ function FieldBody({
       return (
         <LookupPicker
           kind="PROCESS"
-          label=""
           multiple={blend}
           selected={blend ? (attrs.processIds ?? []) : attrs.processId ? [attrs.processId] : []}
           onChange={(ids) => (blend ? set("processIds", ids) : set("processId", ids[0]))}
@@ -209,7 +207,6 @@ function FieldBody({
       return (
         <LookupPicker
           kind="VARIETY"
-          label=""
           multiple
           selected={attrs.varietyIds}
           onChange={(ids) => set("varietyIds", ids)}

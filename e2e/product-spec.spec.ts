@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
-import { clickUntil, icon } from "./helpers";
+import { clickUntil, icon, typeInto } from "./helpers";
 
 // 원두 상세의 스펙 수정. **브라우저에서만 드러나는 것을 본다** —
 // 이미 고른 나라 · 가공 · 품종이 수정 화면에서 통째로 사라져 보였던 버그가 여기 있었다.
@@ -76,4 +76,37 @@ test("취소하면 편집을 버리고 저장값으로 돌아온다", async ({ p
   await expect
     .poll(() => page.locator("dl").innerText())
     .toBe(before);
+});
+
+// 「Geisha」를 쳤을 때 목록에 「게이샤」만 뜨면 그게 내가 찾던 것인지 알 수 없어
+// 옆의 「추가」를 누르게 된다 — 그렇게 같은 품종이 두 행으로 앉았다
+// (실제로 `워시드`(Washed) 옆에 `Washed` 가 따로 있었다).
+//
+// **브라우저에서만 드러난다.** 서버는 `createLookup` 이 기존 행을 돌려주므로 데이터가
+// 안 갈리지만, 「추가」 버튼이 뜨느냐와 영문 이름이 보이느냐는 클라이언트 판정이다.
+test("영문 이름으로 찾아도 이미 있는 품종이 그렇게 보이고, 추가가 안 뜬다", async ({ page }) => {
+  const 게이샤 = await prisma.lookupValue.findFirstOrThrow({
+    where: { kind: "VARIETY", nameKo: "게이샤" },
+    select: { nameEn: true },
+  });
+  expect(게이샤.nameEn).toBe("Geisha");
+
+  const product = await prisma.product.findFirstOrThrow({ select: { id: true } });
+  await page.goto(`/products/${product.id}`);
+  await toggle(page, "원두 정보 수정", "수정 취소");
+
+  // 하이드레이션 전 타이핑은 React 상태에 안 들어가 후보가 영영 안 뜬다.
+  // 후보가 보일 때까지 다시 친다 (helpers.ts 의 actUntil 과 같은 사정)
+  const option = page.getByRole("button", { name: /게이샤/ });
+  await expect(async () => {
+    await typeInto(page, "품종 검색", "Geisha");
+    await expect(option.first()).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+
+  // 검색 결과에는 한글과 영문이 나란히 선다 — 그래야 이게 그거인 줄 안다
+  await expect(option.first()).toContainText("게이샤");
+  await expect(option.first()).toContainText("Geisha");
+
+  // **추가 버튼이 뜨면 안 된다.** 여기가 원래 뚫려 있던 자리다
+  await expect(page.getByRole("button", { name: /추가/ })).toHaveCount(0);
 });
