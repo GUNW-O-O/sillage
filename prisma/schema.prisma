@@ -52,13 +52,38 @@ model InviteCode {
   label        String
   createdById  String
   usedByUserId String? @unique
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  /// 언제 소진됐는지. **`usedByUserId` 와 항상 같이 채워진다** — 어드민 목록이 소진을
+  /// 「누가 · 언제」로 보여주는데(설계 5-4) 「언제」를 담을 자리가 없었다.
+  /// 채우는 유일한 자리가 교환 화면이라 그것이 생기는 이번에 같이 넣는다 (설계 10-5)
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   createdBy User  @relation("InviteIssuer", fields: [createdById], references: [id])
   usedBy    User? @relation("InviteRedemption", fields: [usedByUserId], references: [id])
 
   @@index([expiresAt])
+}
+
+/// 초대 코드 교환 실패 한 건. **행 하나가 곧 실패 로그다** — FR-10 의
+/// 「시도 제한 + 실패 로그」가 이 한 테이블로 해결된다 (설계 10-4).
+///
+/// **메모리에 못 둔다.** 배포가 Cloudflare Workers 라 isolate 마다 카운터가 갈리고,
+/// Vercel 로 가도 함수 인스턴스마다 메모리가 따로다. 배포지를 바꿔서 우회되는 문제가 아니다.
+///
+/// **코드 행에 카운터를 붙이지 않는다.** 자동 대입은 존재하지 않는 코드를 주로 때려서
+/// 셀 행이 없다 — 세는 단위가 IP 여야 방어가 된다.
+///
+/// 오래된 행을 지우는 크론을 두지 않는다. 판정이 15분 창만 보므로 무해하고,
+/// 교환에 성공하면 그 IP 의 행을 지운다 — 정상 사용에서는 이 테이블이 비어 있다.
+model InviteAttempt {
+  id String   @id @default(cuid())
+  /// cf-connecting-ip 또는 x-forwarded-for 의 첫 항. 못 얻으면 "unknown"
+  ip String
+  at DateTime @default(now())
+
+  /// 판정이 항상 「이 ip 의 최근 15분」이라 두 컬럼을 한 인덱스로 받는다
+  @@index([ip, at])
 }
 
 // ─────────────────────────────────────────── 향 계층 (4-6 · 4-7)
