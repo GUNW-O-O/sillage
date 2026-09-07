@@ -26,14 +26,17 @@ export function AccountAdmin({ accounts, codes }: { accounts: Account[]; codes: 
       }
     });
 
-  // 설계 5-4 의 가입일 칸. 초대 코드의 「언제 소진됐나」는 아직 못 채운다 —
-  // InviteCode 에 usedAt 컬럼이 없다. 코드를 소진시키는 교환 화면이 2차라
-  // 그때 컬럼과 함께 붙인다 (docs/backlog.md)
   const joined = (d: Date) =>
     `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 
+  // 소진을 「누가 · 언제」로 적는다 (설계 5-4). `usedAt` 은 교환 화면과 같은
+  // 마이그레이션으로 들어왔다 (설계 10-5) — 그 전에 소진된 코드가 없어 항상 같이 있다
   const state = (c: InviteCodeRow) =>
-    c.usedBy ? `${c.usedBy.displayName} 이(가) 씀` : c.expired ? "만료" : "미사용";
+    c.usedBy
+      ? `${c.usedBy.displayName} 이(가) 씀${c.usedAt ? ` · ${joined(c.usedAt)}` : ""}`
+      : c.expired
+        ? "만료"
+        : "미사용";
 
   return (
     <div className="space-y-8">

@@ -16,7 +16,14 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth/guards";
 import { currentUserId } from "@/lib/auth/identity";
-import { generateInviteCode, INVITE_TTL_MS } from "@/lib/auth/invite-code";
+import { clientIp } from "@/lib/auth/client-ip";
+import {
+  ATTEMPT_LIMIT,
+  generateInviteCode,
+  INVITE_TTL_MS,
+  isLockedOut,
+} from "@/lib/auth/invite-code";
+import { issueSession } from "@/lib/auth/session";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
 import { normalizeName } from "@/lib/normalize";
 import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
@@ -1917,6 +1924,8 @@ export type InviteCodeRow = {
   expiresAt: Date;
   expired: boolean;
   usedBy: { id: string; displayName: string } | null;
+  /// `usedBy` 가 있으면 항상 같이 있다 (설계 10-5). 2차 이전에 소진된 코드는 없다
+  usedAt: Date | null;
   createdAt: Date;
 };
 
@@ -1963,6 +1972,7 @@ export async function listInviteCodes(): Promise<InviteCodeRow[]> {
       label: true,
       expiresAt: true,
       createdAt: true,
+      usedAt: true,
       usedBy: { select: { id: true, displayName: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -1988,6 +1998,65 @@ export async function revokeInviteCode(id: string): Promise<AdminResult> {
   if (!row) return { ok: false, message: "없는 코드예요" };
   if (row.usedByUserId) return { ok: false, message: "이미 쓴 코드는 못 지워요" };
   await prisma.inviteCode.delete({ where: { id } });
+  return { ok: true };
+}
+
+/// 초대 코드를 교환해 계정을 만들고 세션을 굽는다 (설계 10-3).
+///
+/// **어드민 액션이 아니다.** 로그인하지 않은 사람만 부르는 유일한 액션이고,
+/// `proxy.ts` 의 matcher 에서 `/join` 을 뺀 이유가 이것이다.
+///
+/// **실패 사유를 구분해서 알려주지 않는다.** 없는 코드 · 만료 · 소진이 전부 같은 문구다 —
+/// 구분해 주면 자동 대입하는 쪽에 "이 코드는 존재한다" 를 알려주게 된다.
+export async function redeemInviteCode(code: string): Promise<AdminResult> {
+  const ip = await clientIp();
+
+  // take 로 읽는 양을 묶는다. 잠금 판정에 필요한 것은 최근 ATTEMPT_LIMIT 개가 전부다
+  const recent = await prisma.inviteAttempt.findMany({
+    where: { ip },
+    orderBy: { at: "desc" },
+    take: ATTEMPT_LIMIT,
+    select: { at: true },
+  });
+  if (isLockedOut(recent.map((r) => r.at))) {
+    return { ok: false, message: "시도가 너무 많아요. 잠시 뒤에 다시 해 주세요" };
+  }
+
+  // 실패는 전부 이 한 곳을 지난다 — 행을 남기는 것을 빠뜨릴 자리가 없어진다
+  const fail = async (): Promise<AdminResult> => {
+    await prisma.inviteAttempt.create({ data: { ip } });
+    return { ok: false, message: "코드가 맞지 않아요" };
+  };
+
+  const trimmed = code.trim();
+  if (!/^[0-9]{6}$/.test(trimmed)) return fail();
+
+  const invite = await prisma.inviteCode.findUnique({
+    where: { code: trimmed },
+    select: { id: true, label: true, expiresAt: true, usedByUserId: true },
+  });
+  if (!invite || invite.usedByUserId || invite.expiresAt.getTime() < Date.now()) return fail();
+
+  const user = await prisma
+    .$transaction(async (tx) => {
+      const created = await tx.user.create({ data: { displayName: invite.label } });
+      // **경쟁은 DB 가 막는다.** 위의 조회와 여기 사이에 남이 같은 코드를 쓸 수 있다 —
+      // `usedByUserId: null` 조건이 안 맞으면 count 가 0 이고 트랜잭션째 되돌아가
+      // 방금 만든 User 도 같이 사라진다. 애플리케이션 검사에만 기대지 않는다
+      const claimed = await tx.inviteCode.updateMany({
+        where: { id: invite.id, usedByUserId: null },
+        data: { usedByUserId: created.id, usedAt: new Date() },
+      });
+      if (claimed.count === 0) throw new Error("이미 소진된 코드");
+      return created;
+    })
+    .catch(() => null);
+
+  if (!user) return fail();
+
+  // 성공하면 이 IP 의 실패 기록을 지운다. 정상 사용에서는 이 테이블이 비어 있다 (설계 10-4)
+  await prisma.inviteAttempt.deleteMany({ where: { ip } });
+  await issueSession(user.id);
   return { ok: true };
 }
 
