@@ -11,6 +11,11 @@ import { actUntil, prisma, typeAndClickUntilDb, typeInto } from "./helpers";
 // 꼬리표를 **뒤에** 붙인다 (helpers.ts 의 TAG 와 같은 이유)
 const LABEL = "박영희 [E2E교환]";
 
+// **전역 셋업의 세션을 버린다** (session-setup.ts). 이 스펙이 보는 것은 「세션이 없는
+// 사람이 코드를 넣어 들어온다」이고, 쿠키를 들고 `/join` 에 가면 그 경로가 아니다 —
+// 교환 뒤의 이동이 이미 로그인된 상태에서만 확인돼 실제로 막히는 것을 못 봤다.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 const cleanup = async () => {
   // InviteCode → User 순서다. FK 가 그 방향으로 걸려 있다
   await prisma.inviteCode.deleteMany({ where: { label: { contains: "[E2E교환]" } } });
