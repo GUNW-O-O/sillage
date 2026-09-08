@@ -23,7 +23,8 @@
     "check:invite": "tsx scripts/check-invite.ts",
     "check:auth": "tsx scripts/check-auth.ts",
     "check:export": "tsx scripts/check-export.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:dev": "node -e \"require('fs').rmSync('.next/dev',{recursive:true,force:true})\" && playwright test --config=playwright.dev.config.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
