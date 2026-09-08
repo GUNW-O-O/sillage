@@ -7,8 +7,15 @@ import { defineConfig, devices } from "@playwright/test";
 // 끄면 개발에서 나는 것을 테스트가 못 본다. dev 서버를 그대로 쓴다.
 export default defineConfig({
   testDir: "./e2e",
-  // 폰 우선 앱이다 (DESIGN)
-  use: { ...devices["Pixel 7"], baseURL: "http://localhost:3000" },
+  // 전역 셋업이 시드 어드민의 세션 쿠키를 구워둔다 (설계 10-6).
+  // **스위치가 켜져 있어도 쿠키를 붙인다** — 리허설이 별도 모드가 아니라
+  // `.env` 에서 `AUTH_DISABLED=1` 을 빼는 것만으로 끝나야 한다.
+  globalSetup: "./e2e/session-setup.ts",
+  use: {
+    ...devices["Pixel 7"], // 폰 우선 앱이다 (DESIGN)
+    baseURL: "http://localhost:3000",
+    storageState: "e2e/.auth/state.json",
+  },
   // 이미 떠 있으면 그것을 쓴다. dev 서버는 기동이 느려 매번 새로 띄우지 않는다
   webServer: {
     command: "npm run dev",
