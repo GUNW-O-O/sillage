@@ -89,7 +89,8 @@ test("미매핑 큐에서 raw 에 축을 붙이면 판매자 노트와 내 기�
   );
   // 모달의 L2 칩을 누르는 순간 붙는다. 확인 버튼이 따로 없다
   await clickUntilDb(
-    page.getByRole("button", { name: "홍차", exact: true }),
+    // 축의 라벨이 `홍차` 에서 `차` 로 넓어졌다 (설계 2026-09-08 §5). id 는 그대로다
+    page.getByRole("button", { name: "차", exact: true }),
     async () =>
       (await prisma.sellerNote.count({ where: { productId: p.id, nodeId: "black_tea" } })) === 1,
   );

@@ -16,6 +16,15 @@ export default async function ProductPage({ params }: PageProps<"/products/[id]"
   if (!product) notFound();
   const proposals = await listProductProposals(id);
 
+  // 향 계층의 색을 노트 순서대로 이어 이 원두의 프로필을 만든다 (설계 2026-09-08 §6).
+  // **색이 없는 노트는 뺀다** — 없는 색을 회색으로 채우면 「회색인 향」처럼 보인다.
+  // 하나뿐이면 같은 색 두 번이라 단색 띠가 되고, 하나도 없으면 띠를 안 그린다
+  const colors = product.notes.map((n) => n.nodeColor).filter((c) => c !== null);
+  const gradient =
+    colors.length === 0
+      ? null
+      : `linear-gradient(90deg, ${(colors.length === 1 ? [colors[0], colors[0]] : colors).join(", ")})`;
+
   return (
     <main className="mx-auto w-full max-w-[560px] px-4 py-5 pb-24">
       <Link href="/" className="inline-flex h-11 items-center text-[14px] text-muted">
@@ -30,6 +39,14 @@ export default async function ProductPage({ params }: PageProps<"/products/[id]"
           {product.name}
         </h1>
       </header>
+
+      {gradient && (
+        <div
+          aria-hidden
+          className="mt-3 h-1.5 w-full rounded-full"
+          style={{ backgroundImage: gradient }}
+        />
+      )}
 
       <ProductSpecEditor
         productId={product.id}

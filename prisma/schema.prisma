@@ -95,6 +95,11 @@ model FlavorNode {
   parentId String?
   labelKo  String
   labelEn  String
+  /// "#rrggbb". 비면 부모에서 상속한다 — 정책을 스키마에 굳히지 않는다.
+  /// 「L1 · L2 에만 준다」도 특정 노드에만 따로 주는 것도 스키마 변경 없이 된다
+  /// (설계 2026-09-08 §6). SCA 휠 색을 그대로 옮기지 않는다 — CC BY-NC-ND 라서
+  /// 110개 값을 통째로 복사하면 그 선택의 집합이 된다. 값은 globals.css 토큰에서 고른다
+  color    String?
 
   parent   FlavorNode?  @relation("NodeTree", fields: [parentId], references: [id])
   children FlavorNode[] @relation("NodeTree")

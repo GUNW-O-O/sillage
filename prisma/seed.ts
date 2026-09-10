@@ -27,17 +27,35 @@ async function seedFlavorNodes() {
     await prisma.flavorNode.upsert({
       where: { id: l1.id },
       update: CREATE_ONLY,
-      create: { id: l1.id, level: 1, labelKo: l1.labelKo, labelEn: l1.labelEn },
+      create: { id: l1.id, level: 1, labelKo: l1.labelKo, labelEn: l1.labelEn, color: l1.color },
     });
     created += 1;
     for (const l2 of l1.children ?? []) {
       await prisma.flavorNode.upsert({
         where: { id: l2.id },
         update: CREATE_ONLY,
-        create: { id: l2.id, level: 2, parentId: l1.id, labelKo: l2.labelKo, labelEn: l2.labelEn },
+        create: {
+          id: l2.id,
+          level: 2,
+          parentId: l1.id,
+          labelKo: l2.labelKo,
+          labelEn: l2.labelEn,
+          color: l2.color,
+        },
       });
       created += 1;
     }
+  }
+
+  // 색만은 비어 있을 때 채운다. CREATE_ONLY 라 이미 있는 노드는 create 를 안 타는데,
+  // 색은 노드보다 나중에 생긴 컬럼이라 그러면 도는 DB 에 영영 안 닿는다.
+  // **비어 있을 때만이라 어드민이 고친 색은 그대로다** (설계 9장의 원칙은 지킨다)
+  for (const node of [...FLAVOR_NODES, ...FLAVOR_NODES.flatMap((l1) => l1.children ?? [])]) {
+    if (!node.color) continue;
+    await prisma.flavorNode.updateMany({
+      where: { id: node.id, color: null },
+      data: { color: node.color },
+    });
   }
   return created;
 }

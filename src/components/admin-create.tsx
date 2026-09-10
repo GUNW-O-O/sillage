@@ -3,7 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { createFlavorNodeL2, createLookupApproved, createVendorApproved } from "@/app/actions";
+import {
+  createFlavorNodeL2,
+  createLookupApproved,
+  createVendorApproved,
+  updateFlavorNode,
+} from "@/app/actions";
 
 import { Modal } from "./modal";
 
@@ -168,6 +173,89 @@ export function AddFlavorNode({ parentId, parentLabel }: { parentId: string; par
             pending={pending}
             error={error}
             onClick={() => run(() => createFlavorNodeL2(parentId, labelKo, labelEn), close)}
+          />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+/// 노드의 라벨과 부모를 고친다 (설계 2026-09-08 §7).
+/// 만들기만 되고 고칠 수단이 없으면 계층을 손볼 방법이 seed 재작성뿐이다 —
+/// seed 는 어드민이 고친 값을 덮지 않으므로 이미 도는 DB 에는 안 닿는다.
+export function EditFlavorNode({
+  id,
+  labelKo: ko0,
+  labelEn: en0,
+  parentId,
+  parents,
+}: {
+  id: string;
+  labelKo: string;
+  labelEn: string;
+  /// null 이면 Level 1. 부모 선택을 안 보여준다 — L1 아홉 개는 골격이라 안 옮긴다 (설계 7-4)
+  parentId: string | null;
+  parents: { id: string; labelKo: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [labelKo, setKo] = useState(ko0);
+  const [labelEn, setEn] = useState(en0);
+  const [parent, setParent] = useState(parentId);
+  const { error, pending, run } = useSubmit();
+
+  // 닫을 때가 아니라 열 때 되돌린다 — 저장 뒤 router.refresh() 로 새 값이 오는데
+  // 닫으면서 옛 prop 으로 되돌리면 다음에 열었을 때 지워진 값이 보인다
+  const start = () => {
+    setKo(ko0);
+    setEn(en0);
+    setParent(parentId);
+    setOpen(true);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={start}
+        className="shrink-0 text-[12px] text-muted underline-offset-2 hover:underline"
+      >
+        고치기
+      </button>
+      {open && (
+        <Modal title="노드 고치기" subject={ko0} onClose={() => setOpen(false)}>
+          <p className="mb-3 text-[13px] text-muted">
+            id <code className="text-ink">{id}</code> 는 집계 축이라{" "}
+            <strong className="text-ink">안 바뀌어요</strong>. 부모를 옮겨도 이 노드에 붙은
+            판매자 노트는 그대로라 판정값이 안 움직여요.
+          </p>
+          <Text label="한글 라벨" value={labelKo} onChange={setKo} />
+          <Text label="영문 라벨" value={labelEn} onChange={setEn} />
+          {parentId && (
+            <div className="mb-3">
+              <span className="mb-1.5 block text-[13px] text-muted">부모</span>
+              <div className="flex flex-wrap gap-1.5">
+                {parents.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setParent(p.id)}
+                    className={`inline-flex min-h-10 items-center rounded-full border px-3.5 text-[14px] ${
+                      parent === p.id
+                        ? "border-cta bg-surface-card font-medium text-ink"
+                        : "border-hairline bg-surface-raised text-body"
+                    }`}
+                  >
+                    {p.labelKo}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <Submit
+            label="고치기"
+            pending={pending}
+            error={error}
+            onClick={() => run(() => updateFlavorNode(id, parent, labelKo, labelEn), () => setOpen(false))}
           />
         </Modal>
       )}

@@ -175,7 +175,11 @@ export async function listApprovedLookups(kind: "COUNTRY" | "VARIETY" | "PROCESS
   });
 }
 
-export type NoteSuggestion = { raw: string; nodeId: string; labelKo: string };
+export type NoteSuggestion = { raw: string; nodeId: string; path: string };
+
+/// `꽃 · 차 > 화이트 플로럴`. 계층이 두 단이라 부모 한 번만 보면 된다 (설계 2026-09-08 §3)
+const nodePath = (n: { labelKo: string; parent: { labelKo: string } | null }) =>
+  n.parent ? `${n.parent.labelKo} > ${n.labelKo}` : n.labelKo;
 
 /// 노트 자동완성 (설계 7-1 — 노트 입력이 유일한 진짜 병목이다).
 /// 이미 등록된 raw 표현과 노드 라벨을 함께 제안한다. NoteAlias 가 자랄수록
@@ -189,14 +193,22 @@ export async function searchNoteSuggestions(query: string): Promise<NoteSuggesti
   const [aliases, nodes] = await Promise.all([
     prisma.noteAlias.findMany({
       where: { normalizedRaw: { contains: normalizeName(q) } },
-      select: { raw: true, nodeId: true, node: { select: { labelKo: true } } },
+      select: {
+        raw: true,
+        nodeId: true,
+        node: { select: { labelKo: true, parent: { select: { labelKo: true } } } },
+      },
       orderBy: { usageCount: "desc" },
       take: 6,
     }),
-    // 집계 축은 Level 2 다. Level 1 을 제안하면 해상도가 없는 노드가 붙는다
+    // 레벨을 가리지 않는다. 총칭 표현(`플로럴` · `초콜릿`)은 어떤 향의 이름이 아니라
+    // 카테고리 이름 자체라 L1 에 직접 붙어야 한다 (설계 2026-09-08 §4).
+    // 대신 경로를 함께 보여준다 — 안 그러면 큰 갈래와 세부가 한 목록에서 구별이 안 된다
     prisma.flavorNode.findMany({
-      where: { level: 2, OR: [{ labelKo: { contains: q } }, { labelEn: { contains: q, mode: "insensitive" } }] },
-      select: { id: true, labelKo: true },
+      where: { OR: [{ labelKo: { contains: q } }, { labelEn: { contains: q, mode: "insensitive" } }] },
+      select: { id: true, labelKo: true, parent: { select: { labelKo: true } } },
+      // 세부가 먼저다. 순서를 안 주면 take 가 무엇을 자를지 결정적이지 않다
+      orderBy: [{ level: "desc" }, { labelKo: "asc" }],
       take: 6,
     }),
   ]);
@@ -206,12 +218,12 @@ export async function searchNoteSuggestions(query: string): Promise<NoteSuggesti
   for (const a of aliases) {
     if (seen.has(a.raw)) continue;
     seen.add(a.raw);
-    out.push({ raw: a.raw, nodeId: a.nodeId, labelKo: a.node.labelKo });
+    out.push({ raw: a.raw, nodeId: a.nodeId, path: nodePath(a.node) });
   }
   for (const n of nodes) {
     if (seen.has(n.labelKo)) continue;
     seen.add(n.labelKo);
-    out.push({ raw: n.labelKo, nodeId: n.id, labelKo: n.labelKo });
+    out.push({ raw: n.labelKo, nodeId: n.id, path: nodePath(n) });
   }
   return out.slice(0, 8);
 }
@@ -1214,6 +1226,50 @@ export async function createFlavorNodeL2(
   return { ok: true };
 }
 
+/// 노드의 라벨과 부모를 고친다 (설계 2026-09-08 §7).
+/// **id 는 안 바꾼다** — 집계 축이라 바꾸는 순간 데이터 마이그레이션이다.
+/// 부모만 옮기는 것은 `nodeId` 가 그대로라 `noteSetHash` 가 안 움직인다 — 소급이 없다.
+/// 별칭으로 격하하는 것(`remapAlias`)과 비용이 다르고, 그 차이를 `scripts/check-flavor.ts` 가 지킨다.
+export async function updateFlavorNode(
+  id: string,
+  parentId: string | null,
+  labelKo: string,
+  labelEn: string,
+): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+  const ko = labelKo.trim();
+  const en = labelEn.trim();
+  if (!ko || !en) return { ok: false, message: "한글 · 영문 라벨이 둘 다 필요해요" };
+
+  const node = await prisma.flavorNode.findUnique({ where: { id }, select: { level: true } });
+  if (!node) return { ok: false, message: "없는 노드예요" };
+
+  // 레벨을 따로 받지 않는다 — 부모가 없으면 L1, 있으면 L2 로 이미 정해진다.
+  // 그리고 그 레벨이 지금과 달라지는 이동은 막는다. L1 은 골격이고(설계 7-4),
+  // L2 를 L1 으로 올리면 붙어 있던 별칭이 해상도 없는 축에 앉는다
+  if ((parentId ? 2 : 1) !== node.level) {
+    return { ok: false, message: "레벨은 못 바꿔요. 라벨과 부모만 고칠 수 있어요" };
+  }
+
+  if (parentId) {
+    if (parentId === id) return { ok: false, message: "자기 자신을 부모로 둘 수 없어요" };
+    const parent = await prisma.flavorNode.findUnique({
+      where: { id: parentId },
+      select: { level: true },
+    });
+    // 계층은 두 단이다 (설계 2026-09-08 §3). L2 아래로 옮기면 L3 가 생긴다
+    if (!parent || parent.level !== 1) return { ok: false, message: "부모는 Level 1 이어야 해요" };
+  }
+
+  await prisma.flavorNode.update({ where: { id }, data: { parentId, labelKo: ko, labelEn: en } });
+  revalidate("/admin");
+  return { ok: true };
+}
+
 /// 품종 · 가공을 어드민이 직접 추가한다. 인라인 추가와 달리 바로 승인 상태다.
 /// country 는 닫힌 집합이라 막는다 (설계 4-8).
 export async function createLookupApproved(
@@ -1826,6 +1882,9 @@ export type NoteDistribution = {
   raw: string;
   nodeId: string | null;
   nodeLabel: string | null;
+  /// 이 노트가 앉은 축의 색. 노드에 없으면 부모에서 상속한다 (설계 2026-09-08 §6).
+  /// 미매핑이거나 계층 어디에도 색이 없으면 null — 회색으로 채우지 않는다
+  nodeColor: string | null;
   /// 판정 분포. 표본 수를 항상 함께 보여준다 (설계 7-3)
   counts: { STRONG: number; WEAK: number; UNSURE: number; MISS: number };
   hitCount: number;
@@ -1889,7 +1948,7 @@ export async function getProductDetail(productId: string): Promise<ProductDetail
           id: true,
           raw: true,
           nodeId: true,
-          node: { select: { labelKo: true } },
+          node: { select: { labelKo: true, color: true, parent: { select: { color: true } } } },
           noteHits: { select: { value: true, experience: { select: { userId: true } } } },
         },
         orderBy: { position: "asc" },
@@ -1938,6 +1997,7 @@ export async function getProductDetail(productId: string): Promise<ProductDetail
         raw: n.raw,
         nodeId: n.nodeId,
         nodeLabel: n.node?.labelKo ?? null,
+        nodeColor: n.node?.color ?? n.node?.parent?.color ?? null,
         counts,
         hitCount: counts.STRONG + counts.WEAK,
         myValue: mine,

@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 
 import { remapAlias, unmapAlias, type FlavorTreeNode } from "@/app/actions";
 
-import { AddFlavorNode } from "./admin-create";
+import { AddFlavorNode, EditFlavorNode } from "./admin-create";
 import { Modal } from "./modal";
 
 type L1 = FlavorTreeNode & { children: FlavorTreeNode[] };
@@ -17,6 +17,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
   const [target, setTarget] = useState<{ id: string; raw: string; nodeLabel: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const parents = tree.map((l1) => ({ id: l1.id, labelKo: l1.labelKo }));
 
   const run = (fn: () => Promise<{ ok: boolean; message?: string }>) =>
     startTransition(async () => {
@@ -43,6 +44,13 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
             <div className="flex items-baseline gap-2 border-b border-hairline pb-1.5">
               <h2 className="text-[17px] font-semibold text-ink">{l1.labelKo}</h2>
               <span className="text-[12px] text-muted-soft">{l1.id}</span>
+              <EditFlavorNode
+                id={l1.id}
+                labelKo={l1.labelKo}
+                labelEn={l1.labelEn}
+                parentId={null}
+                parents={parents}
+              />
               <span className="tabular ml-auto text-[12px] text-muted">
                 노트 {l1.children.reduce((s, c) => s + c.noteCount, 0)}
               </span>
@@ -58,7 +66,16 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                     <span className="text-[15px] font-medium text-ink">{l2.labelKo}</span>
                     <span className="tabular text-[12px] text-muted">{l2.noteCount}</span>
                   </div>
-                  <div className="text-[11px] text-muted-soft">{l2.id}</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[11px] text-muted-soft">{l2.id}</span>
+                    <EditFlavorNode
+                      id={l2.id}
+                      labelKo={l2.labelKo}
+                      labelEn={l2.labelEn}
+                      parentId={l1.id}
+                      parents={parents}
+                    />
+                  </div>
 
                   {l2.aliases.length > 0 ? (
                     <ul className="mt-2 flex flex-wrap gap-1.5">

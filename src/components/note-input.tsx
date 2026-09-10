@@ -99,8 +99,10 @@ export function NoteChips({
                 className="flex min-h-12 w-full items-center justify-between px-4 text-left"
               >
                 <span className="text-[16px] text-ink">{s.raw}</span>
-                {s.raw !== s.labelKo && (
-                  <span className="text-[12px] text-muted">{s.labelKo}</span>
+                {/* 큰 갈래(`꽃 · 차`)와 세부(`화이트 플로럴`)가 한 목록에 섞이므로
+                    어느 축에 붙는지를 경로로 보여준다 (설계 2026-09-08 §7) */}
+                {s.path !== s.raw && (
+                  <span className="ml-3 shrink-0 text-[12px] text-muted">{s.path}</span>
                 )}
               </button>
             </li>

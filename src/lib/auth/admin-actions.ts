@@ -23,6 +23,7 @@ export const ADMIN_ACTIONS = [
   "createVendorApproved",
   "createLookupApproved",
   "createFlavorNodeL2",
+  "updateFlavorNode",
   "createNodeAndAttach",
   // 별칭
   "remapAlias",

@@ -8,16 +8,24 @@ export type NodeSeed = {
   id: string;
   labelKo: string;
   labelEn: string;
+  /// "#rrggbb". 비면 부모에서 상속한다 (설계 2026-09-08 §6).
+  /// **SCA 휠 색을 옮기지 않았다** — CC BY-NC-ND 라 110개 값을 통째로 복사하면
+  /// 그 선택의 집합이 된다. 휠은 「어느 색 계열인가」의 참조로만 쓰고 값은
+  /// globals.css 의 톤(따뜻하고 채도가 낮은 계열)에 맞춰 골랐다.
+  /// L2 는 대체로 비운다 — 상속으로 충분하고, 칸마다 색을 정하는 논쟁이 안 생긴다
+  color?: string;
   children?: NodeSeed[];
 };
 
-/// Level 1 은 골격이다. 어드민에서도 추가 · 이동 · 삭제를 막는다 (설계 7-4).
-/// Level 3 는 시드하지 않는다 — NoteAlias 의 raw 축적에서 자란다 (설계 4-6).
+/// Level 1 은 골격이다. 어드민에서도 추가 · 삭제를 막는다 (설계 7-4). 라벨은 고칠 수 있다.
+/// **Level 3 는 아예 만들지 않는다** (설계 2026-09-08 §3) — 표본이 1인 동안 L3 집계는
+/// 비율이 아니라 그 한 잔이고, 어휘는 NoteAlias 가 담당한다. 축은 usageCount 를 보고 늘린다.
 export const FLAVOR_NODES: NodeSeed[] = [
   {
     id: "fruity",
     labelKo: "과일",
     labelEn: "Fruity",
+    color: "#b1503f",
     children: [
       { id: "berry", labelKo: "베리", labelEn: "Berry" },
       { id: "citrus", labelKo: "시트러스", labelEn: "Citrus" },
@@ -27,31 +35,43 @@ export const FLAVOR_NODES: NodeSeed[] = [
       { id: "other_fruit", labelKo: "그 외 과일", labelEn: "Other Fruit" },
     ],
   },
+  // L1 이름에 `차` 를 넣는 것이 겹침을 구조적으로 없앤다 (설계 2026-09-08 §5) —
+  // 차를 빼면 L2 가 `꽃` 하나만 남아 L1 과 이름이 같아지고, 자스민도 백합도 그 하나에 붙는다.
+  // L2 는 색으로 가른다. 로스터리가 실제로 그렇게 쓰고(표본에 `화이트 플로럴` 3건,
+  // 「재스민 계열」 0건), L2 이름이 곧 색이라 color 에 무엇을 넣을지 논쟁이 없다.
+  // **옐로우 플로럴은 안 만든다** — 표본 0건이라 무엇을 넣을지 모르는 채로 칸만 생긴다
   {
     id: "floral",
-    labelKo: "꽃",
-    labelEn: "Floral",
+    labelKo: "꽃 · 차",
+    labelEn: "Floral/Tea",
+    color: "#a86b8a",
     children: [
-      { id: "flower", labelKo: "꽃", labelEn: "Flower" },
-      // 향으로는 꽃 계열에 가깝고, 국내 로스터리가 자스민과 같은 다발로 자주 쓴다
-      { id: "black_tea", labelKo: "홍차", labelEn: "Black Tea" },
+      // 여기만 L2 에 색을 준다. L2 이름이 곧 색이라 무엇을 넣을지 논쟁이 없다
+      { id: "flower", labelKo: "화이트 플로럴", labelEn: "White Floral", color: "#d3c3a4" },
+      { id: "red_floral", labelKo: "레드 플로럴", labelEn: "Red Floral", color: "#b2596b" },
+      // id 는 집계 축이라 안 바꾼다. 라벨만 넓혔다 — 얼그레이 · 블랙티가 같이 앉는다
+      { id: "black_tea", labelKo: "차", labelEn: "Tea", color: "#97764e" },
     ],
   },
   {
     id: "sweet",
     labelKo: "단맛",
     labelEn: "Sweet",
+    color: "#c8934e",
     children: [
       { id: "brown_sugar", labelKo: "흑설탕", labelEn: "Brown Sugar" },
       { id: "caramel", labelKo: "카라멜", labelEn: "Caramel" },
       { id: "honey", labelKo: "꿀", labelEn: "Honey" },
       { id: "vanilla", labelKo: "바닐라", labelEn: "Vanilla" },
+      // 표본의 단맛 세부(사탕수수 · 캔디 · 호박엿 · 풍선껌)가 앞의 넷 어디에도 안 맞는다
+      { id: "candy", labelKo: "캔디", labelEn: "Candy" },
     ],
   },
   {
     id: "nutty_cocoa",
     labelKo: "견과 · 코코아",
     labelEn: "Nutty/Cocoa",
+    color: "#7a5741",
     children: [
       { id: "nutty", labelKo: "견과", labelEn: "Nutty" },
       { id: "cocoa", labelKo: "코코아", labelEn: "Cocoa" },
@@ -61,6 +81,7 @@ export const FLAVOR_NODES: NodeSeed[] = [
     id: "spices",
     labelKo: "향신료",
     labelEn: "Spices",
+    color: "#b4682f",
     children: [
       { id: "warm_spice", labelKo: "따뜻한 향신료", labelEn: "Warm Spice" },
       { id: "pungent_spice", labelKo: "자극적 향신료", labelEn: "Pungent Spice" },
@@ -70,6 +91,7 @@ export const FLAVOR_NODES: NodeSeed[] = [
     id: "roasted",
     labelKo: "로스팅",
     labelEn: "Roasted",
+    color: "#57473b",
     children: [
       { id: "grain", labelKo: "곡물", labelEn: "Grain" },
       { id: "burnt", labelKo: "탄내", labelEn: "Burnt" },
@@ -80,6 +102,7 @@ export const FLAVOR_NODES: NodeSeed[] = [
     id: "green_vegetative",
     labelKo: "풀 · 식물",
     labelEn: "Green/Vegetative",
+    color: "#6d7c4c",
     children: [
       { id: "herbal", labelKo: "허브", labelEn: "Herbal" },
       { id: "vegetative", labelKo: "풋내", labelEn: "Vegetative" },
@@ -90,6 +113,7 @@ export const FLAVOR_NODES: NodeSeed[] = [
     id: "sour_fermented",
     labelKo: "산미 · 발효",
     labelEn: "Sour/Fermented",
+    color: "#7d4a63",
     children: [
       { id: "sour", labelKo: "산미", labelEn: "Sour" },
       { id: "winey", labelKo: "와이니", labelEn: "Winey" },
@@ -101,6 +125,7 @@ export const FLAVOR_NODES: NodeSeed[] = [
     id: "other",
     labelKo: "그 외",
     labelEn: "Other",
+    color: "#8e8b82",
     children: [
       { id: "papery", labelKo: "종이 · 눅눅", labelEn: "Papery/Musty" },
       { id: "chemical", labelKo: "화학", labelEn: "Chemical" },
