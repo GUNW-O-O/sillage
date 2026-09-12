@@ -57,7 +57,7 @@ export function ProductSpecEditor({
     });
 
   return (
-    <section className="mt-4 overflow-hidden rounded-[10px] bg-surface-card px-4 py-3">
+    <section className="mt-4 overflow-hidden rounded-[10px] border border-hairline bg-surface-card px-4 py-3">
       {/* 띠는 박스의 상단 경계 자체다 — 제목 위에 얹힌 막대가 아니라 카드의 일부로 읽힌다.
           음수 마진으로 px-4 py-3 을 상쇄해 모서리까지 채우고 overflow-hidden 이 잘라낸다 */}
       {gradient && (

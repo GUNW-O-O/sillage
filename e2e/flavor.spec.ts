@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 import {
   actUntil,
   cleanup,
+  clickUntil,
+  icon,
   openSheet,
   prisma,
   seedProduct,
@@ -186,4 +188,41 @@ test("느낀 노트는 그 향의 색으로 칠하고 안 느낀 것은 무채�
     .first()
     .evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg, "못 느낌에 배경색이 칠해졌다").toBe("rgba(0, 0, 0, 0)");
+});
+
+test("판정을 순환해도 칩 크기가 안 변하고 콘솔이 조용하다", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("pageerror", (e) => errors.push(String(e)));
+
+  const p = await seedProduct(
+    "순환",
+    [{ raw: "자스민", nodeId: "flower" }],
+    { kind: "single", roastLevel: "LIGHT" },
+  );
+  await seedRecord(p.id, []);
+
+  await page.goto("/");
+  await openSheet(page, p.name);
+  await clickUntil(icon(page, "수정"), page.getByText("느낀 것만 눌러 주세요"));
+
+  const chip = page.getByTestId("note-judgements").getByRole("button").first();
+  const box = async () => {
+    const b = await chip.boundingBox();
+    return `${b!.width}x${b!.height}`;
+  };
+
+  // 못 느낌 → 모르겠음 → 약함 → 강함 → 못 느낌. **테두리가 있는 상태와 없는 상태가
+  // 섞이면 1px 씩 흔들린다** — 누를 때마다 칩이 움찔거려 무엇을 눌렀는지 놓친다
+  const sizes = new Set<string>();
+  const labels: string[] = [];
+  for (let i = 0; i < 5; i += 1) {
+    sizes.add(await box());
+    labels.push((await chip.innerText()).split("\n").pop()!);
+    await chip.click();
+  }
+
+  expect(labels).toEqual(["못 느낌", "모르겠음", "약함", "강함", "못 느낌"]);
+  expect([...sizes], "판정이 바뀔 때 칩 크기가 달라진다").toHaveLength(1);
+  expect(errors, "순환 중 콘솔 오류가 났다").toEqual([]);
 });

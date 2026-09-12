@@ -23,11 +23,13 @@ import {
 // 폰 기준이라 가운데 뜨는 박스가 아니라 아래에서 올라오는 시트다 (DESIGN.md).
 const CYCLE: NoteHitValueInput[] = ["MISS", "UNSURE", "WEAK", "STRONG"];
 
+// **네 상태가 테두리 두께를 똑같이 갖는다.** 한쪽에만 테두리가 있으면 순환할 때마다
+// 칩이 2px 씩 움찔거려 무엇을 눌렀는지 놓친다 — 색이 없는 쪽은 투명으로 둔다
 const STYLE: Record<NoteHitValueInput, { label: string; cls: string }> = {
-  MISS: { label: "못 느낌", cls: "border border-hairline text-muted-soft" },
-  UNSURE: { label: "모르겠음", cls: "bg-surface-sunken text-muted" },
-  WEAK: { label: "약함", cls: "bg-accent-tint text-accent-pressed" },
-  STRONG: { label: "강함", cls: "bg-accent text-on-accent" },
+  MISS: { label: "못 느낌", cls: "border-hairline text-muted-soft" },
+  UNSURE: { label: "모르겠음", cls: "border-transparent bg-surface-sunken text-muted" },
+  WEAK: { label: "약함", cls: "border-transparent bg-accent-tint text-accent-pressed" },
+  STRONG: { label: "강함", cls: "border-transparent bg-accent text-on-accent" },
 };
 
 /// 느낀 노트는 그 향의 색으로 칠한다 — 강함이 원색, 약함이 절반이다.
@@ -185,7 +187,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
               </div>
 
               {detail.fields.length > 0 && (
-                <dl className="mt-4 overflow-hidden rounded-[10px] bg-surface-card px-4 py-3">
+                <dl className="mt-4 overflow-hidden rounded-[10px] border border-hairline bg-surface-card px-4 py-3">
                   {/* 이 원두의 프로필 띠. 박스의 상단 경계 자체가 된다 — 음수 마진으로
                       px-4 py-3 을 상쇄해 모서리까지 꽉 채우고, overflow-hidden 이
                       둥근 모서리로 잘라낸다. 원두 상세와 같은 띠다 */}
@@ -226,7 +228,7 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
                   const v = values[n.id] ?? "MISS";
                   const s = STYLE[v];
                   const tone = paint(v, n.nodeColor);
-                  const base = `inline-flex min-h-14 min-w-[92px] flex-col items-start justify-center rounded-[14px] px-4 py-2 text-left ${tone ? "" : s.cls}`;
+                  const base = `inline-flex min-h-14 min-w-[92px] flex-col items-start justify-center rounded-[14px] border px-4 py-2 text-left ${tone ? "" : s.cls}`;
                   const content = (
                     <>
                       <span className="flex items-center gap-1.5 text-[16px] font-medium">
