@@ -171,14 +171,23 @@ test("향 계층이 제 색과 상속을 구별해 보여준다", async ({ page 
   const dot = (id: string) => page.getByTestId(`dot-${id}`);
   const fill = (id: string) => dot(id).evaluate((el) => getComputedStyle(el).backgroundColor);
 
-  // `화이트 플로럴` 은 제 색을 가졌다 — 점이 그 색으로 채워진다
-  await expect(dot("flower")).toHaveAttribute("title", "#d3c3a4");
-  expect(await fill("flower")).toBe("rgb(211, 195, 164)");
+  // **hex 를 박지 않는다** — 어드민이 색을 고칠 수 있게 된 순간 시드 색은
+  // 스펙이 통제하지 않는 데이터가 된다. 지키려는 것은 「제 색과 상속이 구별된다」다
+  const colorOf = async (id: string) =>
+    (await prisma.flavorNode.findUniqueOrThrow({ where: { id }, select: { color: true } })).color;
+  const asRgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
 
-  // `시트러스` 는 제 색이 없어 `과일` 에서 물려받는다. **이것이 구별돼야**
-  // 「띠가 온통 붉다」의 원인을 화면에서 찾을 수 있다 — 채우지 않고 테두리만 그린다
-  await expect(dot("citrus")).toHaveAttribute("title", "#b1503f (부모에서 물려받음)");
-  expect(await fill("citrus")).toBe("rgba(0, 0, 0, 0)");
+  // 제 색을 가진 축을 하나 잡는다 — 점이 그 색으로 채워진다
+  const own = await colorOf("flower");
+  await expect(dot("flower")).toHaveAttribute("title", own!);
+  expect(await fill("flower")).toBe(asRgb(own!));
+
+  // 색이 없는 축은 부모에서 물려받는다. **이것이 구별돼야** 「띠가 온통 한 색」의
+  // 원인을 화면에서 찾을 수 있다 — 채우지 않고 테두리만 그린다
+  expect(await colorOf("berry"), "berry 에 색이 생기면 이 스펙은 다른 노드를 골라야 한다").toBe(null);
+  await expect(dot("berry")).toHaveAttribute("title", `${await colorOf("fruity")} (부모에서 물려받음)`);
+  expect(await fill("berry")).toBe("rgba(0, 0, 0, 0)");
 });
 
 test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되돌린다", async ({ page }) => {

@@ -1608,8 +1608,6 @@ export type FlavorTreeNode = {
   id: string;
   labelKo: string;
   labelEn: string;
-  /// 이 노드에 매핑된 판매자 노트 수. 축이 실제로 쓰이는지 보여준다
-  noteCount: number;
   /// 이 노드로 붙인 표현들. 잘못 앉은 것을 찾는 유일한 방법이다
   aliases: { id: string; raw: string; scope: string }[];
   /// 이 노드에 직접 박힌 색. 없으면 null 이고 부모 것으로 칠해진다
@@ -1622,7 +1620,9 @@ export type FlavorTreeNode = {
 
 export async function listFlavorTreeDetailed() {
   await requireAdmin();
-  const [nodes, aliases, counts] = await Promise.all([
+  // 노드마다 노트 건수를 세지 않는다. 「이 축이 몇 번 쓰였나」는 한 번 확인하면
+  // 끝나는 사실인데 이 화면은 force-dynamic 이라 열 때마다 groupBy 를 치른다
+  const [nodes, aliases] = await Promise.all([
     prisma.flavorNode.findMany({
       select: {
         id: true,
@@ -1638,10 +1638,8 @@ export async function listFlavorTreeDetailed() {
       select: { id: true, raw: true, nodeId: true, scope: true },
       orderBy: { raw: "asc" },
     }),
-    prisma.sellerNote.groupBy({ by: ["nodeId"], _count: { _all: true } }),
   ]);
 
-  const countBy = new Map(counts.map((c) => [c.nodeId, c._count._all]));
   const aliasBy = new Map<string, FlavorTreeNode["aliases"]>();
   for (const a of aliases) {
     const list = aliasBy.get(a.nodeId) ?? [];
@@ -1654,7 +1652,6 @@ export async function listFlavorTreeDetailed() {
     id: n.id,
     labelKo: n.labelKo,
     labelEn: n.labelEn,
-    noteCount: countBy.get(n.id) ?? 0,
     aliases: aliasBy.get(n.id) ?? [],
     color: n.color,
     effectiveColor: n.color ?? (n.parentId ? (colorOf.get(n.parentId) ?? null) : null),

@@ -9,11 +9,6 @@ export const dynamic = "force-dynamic";
 
 export default async function FlavorsPage() {
   const tree = await listFlavorTreeDetailed();
-  const total = tree.reduce((s, l1) => s + l1.children.reduce((t, c) => t + c.noteCount, 0), 0);
-  const empty = tree.reduce(
-    (s, l1) => s + l1.children.filter((c) => c.noteCount === 0).length,
-    0,
-  );
 
   return (
     <main className="max-w-[1100px]">
@@ -23,13 +18,8 @@ export default async function FlavorsPage() {
         이것뿐이에요. 표현을 누르면 다른 축으로 옮기거나 매핑을 지워 미매핑 큐로 되돌릴 수
         있어요. 노드의 라벨과 부모는 「고치기」로 바꿔요. 옮겨도 판정값은 그대로예요.
       </p>
-      <p className="mt-1 text-[13px] text-muted">
-        매핑된 노트 <span className="tabular text-ink">{total}</span> · 아직 안 쓰인 축{" "}
-        <span className="tabular text-ink">{empty}</span>
-      </p>
-
       {/* 색이 어디서 왔는지가 안 보이면 「띠가 온통 한 색」의 원인을 못 찾는다 */}
-      <p className="mt-2 mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
+      <p className="mt-3 mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-3 rounded-full bg-ink" />
           제 색

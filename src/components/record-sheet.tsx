@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { noteGradient } from "@/lib/note-gradient";
+import { mixOnCanvas, readableOn } from "@/lib/readable-on";
 
 import { ExtraNotes } from "./extra-notes";
 import { Close, Pencil, Trash } from "./icons";
@@ -28,6 +29,17 @@ const STYLE: Record<NoteHitValueInput, { label: string; cls: string }> = {
   WEAK: { label: "약함", cls: "bg-accent-tint text-accent-pressed" },
   STRONG: { label: "강함", cls: "bg-accent text-on-accent" },
 };
+
+/// 느낀 노트는 그 향의 색으로 칠한다 — 강함이 원색, 약함이 절반이다.
+/// **못 느낌 · 모르겠음은 무채색으로 둔다.** 안 느낀 것에 색을 주면 띠와 어긋나고,
+/// 화면이 색으로만 가득 차 강도가 안 읽힌다.
+/// 색이 없는 노트(미매핑)는 지금까지 쓰던 accent 로 남는다 — 회색으로 채우지 않는 것과
+/// 같은 이유로, 없는 색을 지어내지 않는다
+function paint(value: NoteHitValueInput, color: string | null): React.CSSProperties | undefined {
+  if (!color || (value !== "WEAK" && value !== "STRONG")) return undefined;
+  const bg = value === "STRONG" ? color : mixOnCanvas(color, 0.5);
+  return { backgroundColor: bg, color: readableOn(bg), borderColor: bg };
+}
 
 const fmt = (iso: string) => {
   const d = new Date(iso);
@@ -209,10 +221,12 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
                 </p>
               )}
 
-              <ul className="mt-3 flex flex-wrap gap-2">
+              <ul data-testid="note-judgements" className="mt-3 flex flex-wrap gap-2">
                 {detail.notes.map((n) => {
-                  const s = STYLE[values[n.id] ?? "MISS"];
-                  const base = `inline-flex min-h-14 min-w-[92px] flex-col items-start justify-center rounded-[14px] px-4 py-2 text-left ${s.cls}`;
+                  const v = values[n.id] ?? "MISS";
+                  const s = STYLE[v];
+                  const tone = paint(v, n.nodeColor);
+                  const base = `inline-flex min-h-14 min-w-[92px] flex-col items-start justify-center rounded-[14px] px-4 py-2 text-left ${tone ? "" : s.cls}`;
                   const content = (
                     <>
                       <span className="flex items-center gap-1.5 text-[16px] font-medium">
@@ -236,11 +250,13 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
                   return (
                     <li key={n.id}>
                       {editing ? (
-                        <button type="button" onClick={() => cycle(n.id)} className={base}>
+                        <button type="button" onClick={() => cycle(n.id)} className={base} style={tone}>
                           {content}
                         </button>
                       ) : (
-                        <div className={base}>{content}</div>
+                        <div className={base} style={tone}>
+                          {content}
+                        </div>
                       )}
                     </li>
                   );

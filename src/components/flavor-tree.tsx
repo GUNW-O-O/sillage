@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { remapAlias, unmapAlias, type FlavorTreeNode } from "@/app/actions";
+import { readableOn } from "@/lib/readable-on";
 
 import { AddFlavorNode, EditFlavorNode } from "./admin-create";
 import { Modal } from "./modal";
@@ -87,9 +88,6 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                 parentId={null}
                 parents={parents}
               />
-              <span className="tabular ml-auto text-[12px] text-muted">
-                노트 {l1.children.reduce((s, c) => s + c.noteCount, 0)}
-              </span>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-3">
@@ -97,17 +95,18 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                 <div
                   key={l2.id}
                   data-testid={`node-${l2.id}`}
-                  className="rounded-[10px] border border-hairline bg-surface-raised p-3"
+                  // 테두리로 색을 보인다. 배경까지 칠하면 L1 아홉 × L2 스물여덟이
+                  // 전부 색면이 되어 무엇이 무엇인지 안 읽힌다
+                  style={l2.effectiveColor ? { borderColor: l2.effectiveColor } : undefined}
+                  className={`rounded-[10px] bg-surface-raised p-3 ${
+                    l2.effectiveColor ? "border-2" : "border border-hairline"
+                  }`}
                 >
-                  <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2">
                     <span className="flex items-center gap-1.5 text-[15px] font-medium text-ink">
                       <ColorDot nodeId={l2.id} color={l2.effectiveColor} inherited={l2.color === null} />
                       {l2.labelKo}
                     </span>
-                    <span className="tabular text-[12px] text-muted">{l2.noteCount}</span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[11px] text-muted-soft">{l2.id}</span>
                     <EditFlavorNode
                       id={l2.id}
                       labelKo={l2.labelKo}
@@ -118,6 +117,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                       parents={parents}
                     />
                   </div>
+                  <div className="text-[11px] text-muted-soft">{l2.id}</div>
 
                   {l2.aliases.length > 0 ? (
                     <ul className="mt-2 flex flex-wrap gap-1.5">
@@ -129,11 +129,23 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                             onClick={() =>
                               setTarget({ id: a.id, raw: a.raw, nodeLabel: l2.labelKo })
                             }
-                            className="inline-flex min-h-8 items-center rounded-full bg-surface-card px-2.5 text-[13px] text-body"
+                            // 칩은 작아서 배경이 태그로 읽힌다. 글자색은 보색이 아니라
+                            // 대비로 고른다 — 보색은 명도가 같아 더 안 읽힌다
+                            style={
+                              l2.effectiveColor
+                                ? {
+                                    backgroundColor: l2.effectiveColor,
+                                    color: readableOn(l2.effectiveColor),
+                                  }
+                                : undefined
+                            }
+                            className={`inline-flex min-h-8 items-center rounded-full px-2.5 text-[13px] ${
+                              l2.effectiveColor ? "" : "bg-surface-card text-body"
+                            }`}
                           >
                             {a.raw}
                             {a.scope === "PERSONAL" && (
-                              <span className="ml-1 text-[10px] text-muted-soft">개인</span>
+                              <span className="ml-1 text-[10px] opacity-70">개인</span>
                             )}
                           </button>
                         </li>
