@@ -9,6 +9,7 @@ import {
   seedProduct,
   TAG,
   typeAndClick,
+  typeInto,
   USER,
 } from "./helpers";
 import { normalizeName } from "../src/lib/normalize";
@@ -178,4 +179,62 @@ test("향 계층이 제 색과 상속을 구별해 보여준다", async ({ page 
   // 「띠가 온통 붉다」의 원인을 화면에서 찾을 수 있다 — 채우지 않고 테두리만 그린다
   await expect(dot("citrus")).toHaveAttribute("title", "#b1503f (부모에서 물려받음)");
   expect(await fill("citrus")).toBe("rgba(0, 0, 0, 0)");
+});
+
+test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되돌린다", async ({ page }) => {
+  // 원래 색으로 되돌려 놓는다 — 시드 노드라 cleanup 이 안 건드린다
+  const before = await prisma.flavorNode.findUniqueOrThrow({
+    where: { id: "citrus" },
+    select: { color: true },
+  });
+
+  try {
+    await page.goto("/admin/flavors");
+    const card = page.getByTestId("node-citrus");
+    // 모달은 포털이 아니라 이 카드 안에 렌더된다 — 카드 밖에서 `.last()` 를 잡으면
+    // **다른 카드의 「고치기」 트리거**가 걸리고 모달 배경이 클릭을 가로막는다
+    const open = card.getByRole("button", { name: "고치기", exact: true }).first();
+    const submit = card.getByRole("button", { name: "고치기", exact: true }).last();
+    await open.click();
+
+    // 지금은 `과일` 색을 물려받는 중이다. 그 사실이 칸에 보여야 비울지 말지를 판단한다
+    await expect(page.getByPlaceholder("#b1503f 물려받는 중")).toBeVisible();
+
+    // **`fill` 이 아니라 실제 타이핑이다.** fill 은 React 상태에 안 들어가는 경우가 있어
+    // 값은 보이는데 저장되는 것은 빈 문자열이 된다 (helpers.ts 의 함정 넷째)
+    await typeInto(page, "#b1503f 물려받는 중", "#c2a42a");
+    await clickUntilDb(
+      submit,
+      async () =>
+        (
+          await prisma.flavorNode.findUniqueOrThrow({
+            where: { id: "citrus" },
+            select: { color: true },
+          })
+        ).color === "#c2a42a",
+    );
+
+    // 점이 제 색으로 채워진다 — 더는 상속이 아니다
+    await expect(page.getByTestId("dot-citrus")).toHaveAttribute("title", "#c2a42a");
+
+    // 비우면 상속으로 돌아간다. **되돌릴 수단이 없으면 잘못 넣은 색을 영영 못 뺀다**
+    await open.click();
+    await card.getByRole("button", { name: "비우기" }).click();
+    await clickUntilDb(
+      submit,
+      async () =>
+        (
+          await prisma.flavorNode.findUniqueOrThrow({
+            where: { id: "citrus" },
+            select: { color: true },
+          })
+        ).color === null,
+    );
+    await expect(page.getByTestId("dot-citrus")).toHaveAttribute(
+      "title",
+      "#b1503f (부모에서 물려받음)",
+    );
+  } finally {
+    await prisma.flavorNode.update({ where: { id: "citrus" }, data: { color: before.color } });
+  }
 });

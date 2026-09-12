@@ -82,6 +82,8 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                 id={l1.id}
                 labelKo={l1.labelKo}
                 labelEn={l1.labelEn}
+                color={l1.color}
+                inheritedColor={null}
                 parentId={null}
                 parents={parents}
               />
@@ -94,6 +96,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
               {l1.children.map((l2) => (
                 <div
                   key={l2.id}
+                  data-testid={`node-${l2.id}`}
                   className="rounded-[10px] border border-hairline bg-surface-raised p-3"
                 >
                   <div className="flex items-baseline justify-between gap-2">
@@ -109,6 +112,8 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                       id={l2.id}
                       labelKo={l2.labelKo}
                       labelEn={l2.labelEn}
+                      color={l2.color}
+                      inheritedColor={l1.effectiveColor}
                       parentId={l1.id}
                       parents={parents}
                     />

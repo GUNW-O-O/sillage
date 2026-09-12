@@ -72,7 +72,7 @@ async function main() {
 
   // ── 옮기기는 공짜다 (설계 §7)
   const before = product.noteSetHash;
-  const moved = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move");
+  const moved = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "");
   ok(moved.ok, `노드를 다른 L1 아래로 옮긴다${moved.ok ? "" : ` — ${moved.message}`}`);
   ok(
     (await prisma.flavorNode.findUniqueOrThrow({ where: { id: NODE }, select: { parentId: true } }))
@@ -87,9 +87,9 @@ async function main() {
   );
 
   // ── 계층은 두 단이다 (설계 §3). L2 아래로 옮기면 L3 가 생긴다
-  const deep = await updateFlavorNode(NODE, "berry", `${TAG}축`, "Check Move");
+  const deep = await updateFlavorNode(NODE, "berry", `${TAG}축`, "Check Move", "");
   ok(!deep.ok, "L2 아래로는 못 옮긴다 — L3 를 만들지 않는다");
-  const promote = await updateFlavorNode(NODE, null, `${TAG}축`, "Check Move");
+  const promote = await updateFlavorNode(NODE, null, `${TAG}축`, "Check Move", "");
   ok(!promote.ok, "레벨은 못 바꾼다 — 부모를 지워 L1 으로 올릴 수 없다");
 
   // ── 격하는 공짜가 아니다 (설계 §7)
@@ -116,6 +116,27 @@ async function main() {
     withUnmapped?.notes.find((n) => n.raw === `${TAG}미매핑`)?.nodeColor === null,
     "미매핑 노트는 색이 없다 — 회색으로 채우지 않는다",
   );
+
+  // ── 색은 어드민이 덮어쓰고, 비우면 상속으로 돌아간다 (설계 §6).
+  //    **되돌릴 수단이 없으면 한 번 잘못 넣은 색을 영영 못 뺀다.** 그래서 빈 문자열이
+  //    「지운다」의 뜻인지를 여기서 지킨다 — 화면만으로는 확인이 안 되는 자리다
+  const painted = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "#123456");
+  ok(painted.ok, `색을 덮어쓴다${painted.ok ? "" : ` — ${painted.message}`}`);
+  ok(
+    (await prisma.flavorNode.findUniqueOrThrow({ where: { id: NODE }, select: { color: true } }))
+      .color === "#123456",
+    "덮어쓴 색이 노드에 남는다",
+  );
+  const cleared = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "");
+  ok(cleared.ok, "색을 비운다");
+  ok(
+    (await prisma.flavorNode.findUniqueOrThrow({ where: { id: NODE }, select: { color: true } }))
+      .color === null,
+    "비우면 null 이 되어 부모에서 다시 물려받는다",
+  );
+  // 값이 그대로 style 에 들어가므로 형식을 막는다
+  const bad = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "red");
+  ok(!bad.ok, "hex 가 아닌 색은 거절한다");
 
   // ── 총칭이 갈 자리가 있다 (설계 §4). actions.ts 의 레벨 제한이 돌아오면 여기서 걸린다.
   // **`플로럴` 로는 이 검사가 안 된다** — 별칭 `Floral` 이 이미 L1 을 가리켜서

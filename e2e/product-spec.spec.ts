@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
-import { clickUntil, icon, typeInto } from "./helpers";
+import { cleanup, clickUntil, icon, seedProduct, typeInto } from "./helpers";
 
 // 원두 상세의 스펙 수정. **브라우저에서만 드러나는 것을 본다** —
 // 이미 고른 나라 · 가공 · 품종이 수정 화면에서 통째로 사라져 보였던 버그가 여기 있었다.
@@ -15,7 +15,11 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL! }),
 });
 
-test.afterAll(() => prisma.$disconnect());
+test.beforeEach(() => cleanup());
+test.afterAll(async () => {
+  await cleanup();
+  await prisma.$disconnect();
+});
 
 async function toggle(page: import("@playwright/test").Page, from: string, to: string) {
   await clickUntil(icon(page, from), icon(page, to));
@@ -91,7 +95,11 @@ test("영문 이름으로 찾아도 이미 있는 품종이 그렇게 보이고,
   });
   expect(게이샤.nameEn).toBe("Geisha");
 
-  const product = await prisma.product.findFirstOrThrow({ select: { id: true } });
+  // **아무 원두나 집으면 안 된다.** 그 원두에 게이샤가 이미 골라져 있으면 화면에
+  // `게이샤 ×` 칩이 서고, 검색 결과를 찾는 로케이터가 그 칩을 먼저 잡는다.
+  // 어느 원두가 first 인지는 물리 행 순서라 검사 스크립트가 원두를 만들고 지우면 바뀐다 —
+  // 실제로 그렇게 드러났다. 스펙이 제 입력을 만든다
+  const product = await seedProduct("품종검색", [{ raw: "자스민", nodeId: "flower" }]);
   await page.goto(`/products/${product.id}`);
   await toggle(page, "원두 정보 수정", "수정 취소");
 

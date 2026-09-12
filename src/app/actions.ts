@@ -1235,6 +1235,9 @@ export async function updateFlavorNode(
   parentId: string | null,
   labelKo: string,
   labelEn: string,
+  /// 빈 문자열이면 색을 지운다 — 부모에서 물려받는 상태로 돌아간다 (설계 2026-09-08 §6).
+  /// 되돌릴 수단이 없으면 한 번 잘못 넣은 색을 영영 못 뺀다
+  color: string,
 ): Promise<AdminResult> {
   try {
     await requireAdmin();
@@ -1244,6 +1247,13 @@ export async function updateFlavorNode(
   const ko = labelKo.trim();
   const en = labelEn.trim();
   if (!ko || !en) return { ok: false, message: "한글 · 영문 라벨이 둘 다 필요해요" };
+
+  // 값이 그대로 style 에 들어가므로 형식을 여기서 막는다. 6자리 hex 만 받는다 —
+  // 색 이름이나 함수 표기를 허용하면 무엇이 들어왔는지 화면에서 대조할 수가 없다
+  const hex = color.trim();
+  if (hex && !/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return { ok: false, message: "색은 #rrggbb 여섯 자리로 적어요" };
+  }
 
   const node = await prisma.flavorNode.findUnique({ where: { id }, select: { level: true } });
   if (!node) return { ok: false, message: "없는 노드예요" };
@@ -1265,8 +1275,13 @@ export async function updateFlavorNode(
     if (!parent || parent.level !== 1) return { ok: false, message: "부모는 Level 1 이어야 해요" };
   }
 
-  await prisma.flavorNode.update({ where: { id }, data: { parentId, labelKo: ko, labelEn: en } });
+  await prisma.flavorNode.update({
+    where: { id },
+    data: { parentId, labelKo: ko, labelEn: en, color: hex || null },
+  });
   revalidate("/admin");
+  // 띠는 원두 상세와 기록 시트가 그린다. 어드민만 새로 그리면 색이 안 바뀐 것처럼 보인다
+  revalidate("/");
   return { ok: true };
 }
 
