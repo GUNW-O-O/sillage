@@ -1597,13 +1597,26 @@ export type FlavorTreeNode = {
   noteCount: number;
   /// 이 노드로 붙인 표현들. 잘못 앉은 것을 찾는 유일한 방법이다
   aliases: { id: string; raw: string; scope: string }[];
+  /// 이 노드에 직접 박힌 색. 없으면 null 이고 부모 것으로 칠해진다
+  color: string | null;
+  /// 화면이 실제로 칠하는 색 — 자기 색이 없으면 부모에서 상속한다 (설계 2026-09-08 §6).
+  /// `color` 와 나란히 두는 이유는 **상속인지 제 색인지가 구별돼야** 하기 때문이다.
+  /// 둘이 같으면 제 색, effectiveColor 만 있으면 상속, 둘 다 null 이면 색이 없다
+  effectiveColor: string | null;
 };
 
 export async function listFlavorTreeDetailed() {
   await requireAdmin();
   const [nodes, aliases, counts] = await Promise.all([
     prisma.flavorNode.findMany({
-      select: { id: true, level: true, parentId: true, labelKo: true, labelEn: true },
+      select: {
+        id: true,
+        level: true,
+        parentId: true,
+        labelKo: true,
+        labelEn: true,
+        color: true,
+      },
       orderBy: [{ level: "asc" }, { labelKo: "asc" }],
     }),
     prisma.noteAlias.findMany({
@@ -1621,12 +1634,15 @@ export async function listFlavorTreeDetailed() {
     aliasBy.set(a.nodeId, list);
   }
 
+  const colorOf = new Map(nodes.map((n) => [n.id, n.color]));
   const build = (n: (typeof nodes)[number]): FlavorTreeNode => ({
     id: n.id,
     labelKo: n.labelKo,
     labelEn: n.labelEn,
     noteCount: countBy.get(n.id) ?? 0,
     aliases: aliasBy.get(n.id) ?? [],
+    color: n.color,
+    effectiveColor: n.color ?? (n.parentId ? (colorOf.get(n.parentId) ?? null) : null),
   });
 
   return nodes

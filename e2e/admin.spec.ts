@@ -160,3 +160,22 @@ test("판정이 붙은 노트는 어드민도 못 지운다", async ({ page }) =
   await expect(row.getByRole("button", { name: "지우기" })).toBeDisabled();
   expect(await prisma.sellerNote.count({ where: { productId: p.id } })).toBe(2);
 });
+
+test("향 계층이 제 색과 상속을 구별해 보여준다", async ({ page }) => {
+  await page.goto("/admin/flavors");
+  await expect(page.getByRole("heading", { name: "향 계층" })).toBeVisible();
+
+  // 점은 노드마다 하나다. **노드를 특정하지 않으면 스펙이 통과만 한다** —
+  // `과일` 아래 L2 여섯이 전부 같은 색을 물려받아 색 문자열로는 구별이 안 된다
+  const dot = (id: string) => page.getByTestId(`dot-${id}`);
+  const fill = (id: string) => dot(id).evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  // `화이트 플로럴` 은 제 색을 가졌다 — 점이 그 색으로 채워진다
+  await expect(dot("flower")).toHaveAttribute("title", "#d3c3a4");
+  expect(await fill("flower")).toBe("rgb(211, 195, 164)");
+
+  // `시트러스` 는 제 색이 없어 `과일` 에서 물려받는다. **이것이 구별돼야**
+  // 「띠가 온통 붉다」의 원인을 화면에서 찾을 수 있다 — 채우지 않고 테두리만 그린다
+  await expect(dot("citrus")).toHaveAttribute("title", "#b1503f (부모에서 물려받음)");
+  expect(await fill("citrus")).toBe("rgba(0, 0, 0, 0)");
+});

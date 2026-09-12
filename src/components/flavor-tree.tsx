@@ -10,6 +10,39 @@ import { Modal } from "./modal";
 
 type L1 = FlavorTreeNode & { children: FlavorTreeNode[] };
 
+// 색이 어디서 왔는지가 보여야 한다. 띠가 온통 한 색으로 나오는 원인이 대개
+// 「L2 가 제 색 없이 L1 을 상속한다」인데, 색만 찍으면 그것이 안 보인다.
+//   꽉 찬 점 = 이 노드가 제 색을 가졌다
+//   빈 점   = 부모에서 물려받는 중
+//   빗금 점 = 계층 어디에도 색이 없다 (띠에서 이 노트는 빠진다)
+function ColorDot({
+  nodeId,
+  color,
+  inherited,
+}: {
+  nodeId: string;
+  color: string | null;
+  inherited: boolean;
+}) {
+  if (!color) {
+    return (
+      <span
+        data-testid={`dot-${nodeId}`}
+        title="색이 없어요 — 띠에서 빠져요"
+        className="inline-block size-3 shrink-0 rounded-full border border-dashed border-muted-soft"
+      />
+    );
+  }
+  return (
+    <span
+      data-testid={`dot-${nodeId}`}
+      title={inherited ? `${color} (부모에서 물려받음)` : color}
+      style={inherited ? { borderColor: color } : { backgroundColor: color }}
+      className={`inline-block size-3 shrink-0 rounded-full ${inherited ? "border-2" : ""}`}
+    />
+  );
+}
+
 // 어느 표현이 어느 축에 앉았는지 보이는 것이 잘못 붙인 것을 찾는 유일한 방법이다.
 // 그래서 계층만 보여주지 않고 붙은 별칭을 노드 안에 함께 편다 (설계 7-4).
 export function FlavorTree({ tree }: { tree: L1[] }) {
@@ -42,6 +75,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
         {tree.map((l1) => (
           <section key={l1.id}>
             <div className="flex items-baseline gap-2 border-b border-hairline pb-1.5">
+              <ColorDot nodeId={l1.id} color={l1.effectiveColor} inherited={l1.color === null} />
               <h2 className="text-[17px] font-semibold text-ink">{l1.labelKo}</h2>
               <span className="text-[12px] text-muted-soft">{l1.id}</span>
               <EditFlavorNode
@@ -63,7 +97,10 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                   className="rounded-[10px] border border-hairline bg-surface-raised p-3"
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[15px] font-medium text-ink">{l2.labelKo}</span>
+                    <span className="flex items-center gap-1.5 text-[15px] font-medium text-ink">
+                      <ColorDot nodeId={l2.id} color={l2.effectiveColor} inherited={l2.color === null} />
+                      {l2.labelKo}
+                    </span>
                     <span className="tabular text-[12px] text-muted">{l2.noteCount}</span>
                   </div>
                   <div className="flex items-baseline gap-2">
