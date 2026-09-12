@@ -24,10 +24,13 @@ export function ProductSpecEditor({
   productId,
   attributes,
   fields,
+  gradient,
 }: {
   productId: string;
   attributes: Record<string, unknown>;
   fields: { label: string; value: string }[];
+  /// 이 원두의 프로필 띠. 노트에 색이 하나도 없으면 null 이라 안 그린다
+  gradient: string | null;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -54,7 +57,18 @@ export function ProductSpecEditor({
     });
 
   return (
-    <section className="mt-4 rounded-[10px] bg-surface-card px-4 py-3">
+    <section className="mt-4 overflow-hidden rounded-[10px] bg-surface-card px-4 py-3">
+      {/* 띠는 박스의 상단 경계 자체다 — 제목 위에 얹힌 막대가 아니라 카드의 일부로 읽힌다.
+          음수 마진으로 px-4 py-3 을 상쇄해 모서리까지 채우고 overflow-hidden 이 잘라낸다 */}
+      {gradient && (
+        <div
+          aria-hidden
+          data-testid="note-gradient"
+          className="-mx-4 -mt-3 mb-2.5 h-2.5"
+          style={{ backgroundImage: gradient }}
+        />
+      )}
+
       <div className="flex items-baseline justify-between">
         <h2 className="text-[14px] font-medium text-muted">원두 정보</h2>
         <button

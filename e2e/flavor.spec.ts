@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-import { actUntil, cleanup, prisma, seedProduct, TAG, typeInto } from "./helpers";
+import {
+  actUntil,
+  cleanup,
+  openSheet,
+  prisma,
+  seedProduct,
+  seedRecord,
+  TAG,
+  typeInto,
+} from "./helpers";
 
 // 향 계층이 화면에서 성립하는가 (설계 2026-09-08 §9).
 //
@@ -78,4 +87,55 @@ test("붙은 축이 하나도 없으면 띠를 안 그린다", async ({ page }) 
   await expect(page.getByRole("heading", { name: p.name })).toBeVisible();
   // 없는 색을 회색으로 채우면 「회색인 향」처럼 보인다 — 아예 안 그린다 (설계 §6 미결 해소)
   await expect(page.locator('[aria-hidden][style*="linear-gradient"]')).toHaveCount(0);
+});
+
+test("띠가 원두 정보 박스의 상단 경계에 붙는다", async ({ page }) => {
+  const p = await seedProduct(
+    "박스띠",
+    [{ raw: "자스민", nodeId: "flower" }],
+    { kind: "single", roastLevel: "LIGHT" },
+  );
+  await page.goto(`/products/${p.id}`);
+
+  // 띠는 제목 아래 떠 있는 막대가 아니라 카드의 일부다 — 박스 안에 있어야 한다
+  const box = page.locator("section", { has: page.getByRole("heading", { name: "원두 정보" }) });
+  await expect(box.getByTestId("note-gradient")).toBeVisible();
+});
+
+test("기록 시트의 원두 정보에도 같은 띠가 뜬다", async ({ page }) => {
+  const p = await seedProduct(
+    "시트띠",
+    [
+      { raw: "자스민", nodeId: "flower" },
+      { raw: "블루베리", nodeId: "berry" },
+    ],
+    { kind: "single", roastLevel: "LIGHT" },
+  );
+  await seedRecord(p.id, [{ sellerNoteId: p.sellerNotes[0].id, value: "STRONG" }]);
+
+  await page.goto("/");
+  await openSheet(page, p.name);
+
+  // 판정을 매기는 자리에서도 이 원두의 프로필이 보인다. 원두 상세와 같은 띠다
+  const band = page.getByTestId("note-gradient");
+  await expect(band).toBeVisible();
+  // 시트는 클라이언트에서 style 을 붙여 브라우저가 rgb 로 정규화한다.
+  // 원두 상세는 서버 렌더라 hex 가 그대로 남는다 — 같은 색인데 표기가 다르다
+  const style = await band.getAttribute("style");
+  expect(style).toContain("rgb(211, 195, 164)");
+  expect(style).toContain("rgb(177, 80, 63)");
+});
+
+test("색이 하나도 없으면 기록 시트도 띠를 안 그린다", async ({ page }) => {
+  const p = await seedProduct("시트색없음", [{ raw: "누룩", nodeId: null }], {
+    kind: "single",
+    roastLevel: "LIGHT",
+  });
+  await seedRecord(p.id, []);
+
+  await page.goto("/");
+  await openSheet(page, p.name);
+
+  await expect(page.getByText("누룩")).toBeVisible();
+  await expect(page.getByTestId("note-gradient")).toHaveCount(0);
 });

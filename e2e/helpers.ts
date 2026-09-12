@@ -138,7 +138,12 @@ export type SeedNote = { raw: string; nodeId: string | null };
 
 /// 테스트용 원두 하나. 로스터리는 시드에 있는 것을 쓴다 —
 /// 로스터리까지 만들면 승인 대기 목록이 테스트 사이에 샌다
-export async function seedProduct(name: string, notes: SeedNote[]) {
+export async function seedProduct(
+  name: string,
+  notes: SeedNote[],
+  /// 원두 정보 박스는 채운 칸이 있을 때만 뜬다. 그 박스를 보는 스펙만 넘긴다
+  attributes: Record<string, unknown> = {},
+) {
   const vendor = await prisma.vendor.findFirstOrThrow({ select: { id: true, name: true } });
   const full = `${name} ${TAG}`;
   const product = await prisma.product.create({
@@ -148,7 +153,7 @@ export async function seedProduct(name: string, notes: SeedNote[]) {
       name: full,
       normalizedName: normalizeName(full),
       noteSetHash: computeNoteSetHash(notes),
-      attributes: {},
+      attributes: attributes as never,
       sellerNotes: { create: notes.map((n, i) => ({ ...n, position: i })) },
     },
     select: {

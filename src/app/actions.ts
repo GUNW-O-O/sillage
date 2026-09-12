@@ -1509,6 +1509,9 @@ export type RecordDetail = {
     id: string;
     raw: string;
     nodeId: string | null;
+    /// 이 노트가 앉은 축의 색. 노드에 없으면 부모에서 상속한다 (설계 2026-09-08 §6).
+    /// 미매핑이거나 계층 어디에도 색이 없으면 null — 회색으로 채우지 않는다
+    nodeColor: string | null;
     value: NoteHitValueInput;
     /// 내가 기록한 뒤에 추가된 노트. 4-5 의 "안 건드림 = 못 느낌" 은 그 노트가 대조
     /// 화면에 떠 있었다는 전제 위에 서는데, 나중에 추가된 것은 그 전제가 깨진다 (설계 7-4)
@@ -1531,7 +1534,14 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
       attributes: true,
       vendor: { select: { name: true } },
       sellerNotes: {
-        select: { id: true, raw: true, nodeId: true, addedAt: true },
+        select: {
+          id: true,
+          raw: true,
+          nodeId: true,
+          addedAt: true,
+          // 띠를 그리려면 색이 필요하다. L2 에 색이 없으면 L1 에서 상속한다
+          node: { select: { color: true, parent: { select: { color: true } } } },
+        },
         orderBy: { position: "asc" },
       },
       experiences: {
@@ -1569,6 +1579,7 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
       id: n.id,
       raw: n.raw,
       nodeId: n.nodeId,
+      nodeColor: n.node?.color ?? n.node?.parent?.color ?? null,
       value: (values.get(n.id) ?? "MISS") as NoteHitValueInput,
       addedAfterRecord: !!exp && n.addedAt > exp.updatedAt,
     })),

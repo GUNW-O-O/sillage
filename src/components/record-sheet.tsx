@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
+import { noteGradient } from "@/lib/note-gradient";
+
 import { ExtraNotes } from "./extra-notes";
 import { Close, Pencil, Trash } from "./icons";
 
@@ -87,6 +89,8 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
     return counts;
   }, [detail, values]);
 
+  const gradient = noteGradient(detail?.notes.map((n) => n.nodeColor) ?? []);
+
   const cycle = (id: string) =>
     setValues((v) => ({ ...v, [id]: CYCLE[(CYCLE.indexOf(v[id]) + 1) % CYCLE.length] }));
 
@@ -169,7 +173,18 @@ export function RecordSheet({ productId, onClose }: { productId: string; onClose
               </div>
 
               {detail.fields.length > 0 && (
-                <dl className="mt-4 rounded-[10px] bg-surface-card px-4 py-3">
+                <dl className="mt-4 overflow-hidden rounded-[10px] bg-surface-card px-4 py-3">
+                  {/* 이 원두의 프로필 띠. 박스의 상단 경계 자체가 된다 — 음수 마진으로
+                      px-4 py-3 을 상쇄해 모서리까지 꽉 채우고, overflow-hidden 이
+                      둥근 모서리로 잘라낸다. 원두 상세와 같은 띠다 */}
+                  {gradient && (
+                    <div
+                      aria-hidden
+                      data-testid="note-gradient"
+                      className="-mx-4 -mt-3 mb-2.5 h-2.5"
+                      style={{ backgroundImage: gradient }}
+                    />
+                  )}
                   {detail.fields.map((f) => (
                     <div key={f.label} className="flex gap-3 py-1">
                       <dt className="w-[64px] shrink-0 text-[13px] text-muted">{f.label}</dt>
