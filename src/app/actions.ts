@@ -26,6 +26,7 @@ import {
 import { issueSession } from "@/lib/auth/session";
 import { findExistingLookup } from "@/lib/lookup-match";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
+import { aliasColorMap, noteColor } from "@/lib/flavor-color";
 import { normalizeName } from "@/lib/normalize";
 import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
 import { collectLookupIds, describeProduct } from "@/lib/product-display";
@@ -1584,6 +1585,7 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
 
   const exp = product.experiences[0];
   const values = new Map(exp?.noteHits.map((h) => [h.sellerNoteId, h.value]) ?? []);
+  const aliasColors = await paintedAliases();
 
   return {
     productId: product.id,
@@ -1594,7 +1596,7 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
       id: n.id,
       raw: n.raw,
       nodeId: n.nodeId,
-      nodeColor: n.node?.color ?? n.node?.parent?.color ?? null,
+      nodeColor: noteColor(n.raw, n.node, aliasColors),
       value: (values.get(n.id) ?? "MISS") as NoteHitValueInput,
       addedAfterRecord: !!exp && n.addedAt > exp.updatedAt,
     })),
@@ -1604,12 +1606,24 @@ export async function getRecordDetail(productId: string): Promise<RecordDetail |
   };
 }
 
+/// 색을 덮어쓴 별칭만 읽는다. 기본이 상속이라 대부분 null 이고 이 조회는 작다 —
+/// 별칭 전량을 싣지 않는다 (설계 2026-09-08 §6, src/lib/flavor-color.ts).
+async function paintedAliases() {
+  return aliasColorMap(
+    await prisma.noteAlias.findMany({
+      where: { color: { not: null } },
+      select: { raw: true, color: true },
+    }),
+  );
+}
+
 export type FlavorTreeNode = {
   id: string;
   labelKo: string;
   labelEn: string;
-  /// 이 노드로 붙인 표현들. 잘못 앉은 것을 찾는 유일한 방법이다
-  aliases: { id: string; raw: string; scope: string }[];
+  /// 이 노드로 붙인 표현들. 잘못 앉은 것을 찾는 유일한 방법이다.
+  /// `color` 는 이 표현만의 덮어쓰기 — null 이면 축에서 물려받는다
+  aliases: { id: string; raw: string; scope: string; color: string | null }[];
   /// 이 노드에 직접 박힌 색. 없으면 null 이고 부모 것으로 칠해진다
   color: string | null;
   /// 화면이 실제로 칠하는 색 — 자기 색이 없으면 부모에서 상속한다 (설계 2026-09-08 §6).
@@ -1635,7 +1649,7 @@ export async function listFlavorTreeDetailed() {
       orderBy: [{ level: "asc" }, { labelKo: "asc" }],
     }),
     prisma.noteAlias.findMany({
-      select: { id: true, raw: true, nodeId: true, scope: true },
+      select: { id: true, raw: true, nodeId: true, scope: true, color: true },
       orderBy: { raw: "asc" },
     }),
   ]);
@@ -1643,7 +1657,7 @@ export async function listFlavorTreeDetailed() {
   const aliasBy = new Map<string, FlavorTreeNode["aliases"]>();
   for (const a of aliases) {
     const list = aliasBy.get(a.nodeId) ?? [];
-    list.push({ id: a.id, raw: a.raw, scope: a.scope });
+    list.push({ id: a.id, raw: a.raw, scope: a.scope, color: a.color });
     aliasBy.set(a.nodeId, list);
   }
 
@@ -1668,6 +1682,30 @@ export async function listFlavorTreeDetailed() {
 /// 잘못 앉은 표현을 다른 축으로 옮긴다 (설계 7-4 NoteAlias 재매핑).
 /// 그 표현을 쓰는 판매자 노트도 함께 옮기고 noteSetHash 를 재계산한다.
 /// 판정값은 그대로 둔다 — 축이 바뀐 것이지 판정이 바뀐 게 아니다.
+/// 표현 하나의 색을 덮어쓴다. 빈 문자열이면 지워서 앉은 축의 색으로 돌아간다
+/// (설계 2026-09-08 §6). **축을 옮기는 것이 아니라 색만 바꾼다** — noteSetHash 는
+/// 안 움직이고 판정도 그대로다. 색은 동일성 키 밖이다.
+export async function setAliasColor(aliasId: string, color: string): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+  // 값이 그대로 style 에 들어가므로 형식을 여기서 막는다 (updateFlavorNode 와 같은 이유)
+  const hex = color.trim();
+  if (hex && !/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return { ok: false, message: "색은 #rrggbb 여섯 자리로 적어요" };
+  }
+  const alias = await prisma.noteAlias.findUnique({ where: { id: aliasId }, select: { id: true } });
+  if (!alias) return { ok: false, message: "없는 표현이에요" };
+
+  await prisma.noteAlias.update({ where: { id: aliasId }, data: { color: hex || null } });
+  revalidate("/admin");
+  // 띠와 판정 칩이 이 색을 쓴다. 어드민만 새로 그리면 색이 안 바뀐 것처럼 보인다
+  revalidate("/");
+  return { ok: true };
+}
+
 export async function remapAlias(aliasId: string, nodeId: string): Promise<AdminResult> {
   try {
     await requireAdmin();
@@ -2011,6 +2049,7 @@ export async function getProductDetail(productId: string): Promise<ProductDetail
         select: { id: true, nameKo: true },
       })
     : [];
+  const aliasColors = await paintedAliases();
 
   return {
     id: product.id,
@@ -2036,7 +2075,7 @@ export async function getProductDetail(productId: string): Promise<ProductDetail
         raw: n.raw,
         nodeId: n.nodeId,
         nodeLabel: n.node?.labelKo ?? null,
-        nodeColor: n.node?.color ?? n.node?.parent?.color ?? null,
+        nodeColor: noteColor(n.raw, n.node, aliasColors),
         counts,
         hitCount: counts.STRONG + counts.WEAK,
         myValue: mine,

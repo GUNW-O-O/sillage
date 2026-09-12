@@ -27,6 +27,7 @@ export const ADMIN_ACTIONS = [
   "createNodeAndAttach",
   // 별칭
   "remapAlias",
+  "setAliasColor",
   "unmapAlias",
   // 목록 · 통계
   "adminStats",

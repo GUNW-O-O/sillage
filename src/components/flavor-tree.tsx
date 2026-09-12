@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { remapAlias, unmapAlias, type FlavorTreeNode } from "@/app/actions";
+import { remapAlias, setAliasColor, unmapAlias, type FlavorTreeNode } from "@/app/actions";
 import { readableOn } from "@/lib/readable-on";
 
 import { AddFlavorNode, EditFlavorNode } from "./admin-create";
@@ -48,7 +48,16 @@ function ColorDot({
 // 그래서 계층만 보여주지 않고 붙은 별칭을 노드 안에 함께 편다 (설계 7-4).
 export function FlavorTree({ tree }: { tree: L1[] }) {
   const router = useRouter();
-  const [target, setTarget] = useState<{ id: string; raw: string; nodeLabel: string } | null>(null);
+  const [target, setTarget] = useState<{
+    id: string;
+    raw: string;
+    nodeLabel: string;
+    /// 이 표현만의 덮어쓰기. null 이면 축에서 물려받는 중이다
+    color: string | null;
+    /// 비웠을 때 대신 칠해질 색 — 「지우면 무엇이 되는가」를 보여줘야 비울 수 있다
+    inherited: string | null;
+  } | null>(null);
+  const [aliasColor, setAliasColor_] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const parents = tree.map((l1) => ({ id: l1.id, labelKo: l1.labelKo }));
@@ -127,20 +136,31 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                             type="button"
                             disabled={pending}
                             onClick={() =>
-                              setTarget({ id: a.id, raw: a.raw, nodeLabel: l2.labelKo })
+                              {
+                                setTarget({
+                                  id: a.id,
+                                  raw: a.raw,
+                                  nodeLabel: l2.labelKo,
+                                  color: a.color,
+                                  inherited: l2.effectiveColor,
+                                });
+                                setAliasColor_(a.color ?? "");
+                              }
                             }
                             // 칩은 작아서 배경이 태그로 읽힌다. 글자색은 보색이 아니라
                             // 대비로 고른다 — 보색은 명도가 같아 더 안 읽힌다
+                            // 별칭이 제 색을 가졌으면 그것이 축 색을 이긴다 —
+                            // 화면이 실제 띠와 같은 색을 보여야 대조가 된다
                             style={
-                              l2.effectiveColor
+                              (a.color ?? l2.effectiveColor)
                                 ? {
-                                    backgroundColor: l2.effectiveColor,
-                                    color: readableOn(l2.effectiveColor),
+                                    backgroundColor: (a.color ?? l2.effectiveColor)!,
+                                    color: readableOn((a.color ?? l2.effectiveColor)!),
                                   }
                                 : undefined
                             }
                             className={`inline-flex min-h-8 items-center rounded-full px-2.5 text-[13px] ${
-                              l2.effectiveColor ? "" : "bg-surface-card text-body"
+                              a.color ?? l2.effectiveColor ? "" : "bg-surface-card text-body"
                             }`}
                           >
                             {a.raw}
@@ -174,6 +194,41 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
             <strong className="text-ink"> 판정값은 그대로예요</strong> — 축이 바뀐 것이지 판정이
             바뀐 게 아니에요.
           </p>
+
+          {/* 색만 바꾸는 것은 축을 옮기는 것과 다르다 — noteSetHash 가 안 움직인다.
+              그래서 옮기기 목록과 나란히 두지 않고 위에 따로 둔다 */}
+          <div className="mb-5 rounded-[10px] border border-hairline p-3">
+            <span className="mb-1.5 block text-[13px] text-muted">이 표현만의 색</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                aria-label="색 고르기"
+                value={aliasColor || target.inherited || "#888888"}
+                onChange={(e) => setAliasColor_(e.target.value)}
+                className="h-11 w-14 shrink-0 cursor-pointer rounded-[10px] bg-surface-sunken p-1"
+              />
+              <input
+                value={aliasColor}
+                onChange={(e) => setAliasColor_(e.target.value)}
+                placeholder={
+                  target.inherited ? `${target.inherited} 물려받는 중` : "색 없음"
+                }
+                className="h-11 min-w-0 flex-1 rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none placeholder:text-muted-soft"
+              />
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => setAliasColor(target.id, aliasColor))}
+                className="h-11 shrink-0 rounded-[10px] bg-cta px-4 text-[14px] font-semibold text-on-cta"
+              >
+                색 바꾸기
+              </button>
+            </div>
+            <p className="mt-1.5 text-[12px] text-muted-soft">
+              비우고 눌러요 → {target.inherited ? "축의 색을 물려받아요" : "색이 없어져요"}.
+              판정값도 noteSetHash 도 안 움직여요.
+            </p>
+          </div>
 
           {tree.map((l1) => (
             <div key={l1.id} className="mb-4 last:mb-0">

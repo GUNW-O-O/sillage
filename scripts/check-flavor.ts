@@ -14,6 +14,7 @@ import {
   getProductDetail,
   remapAlias,
   searchNoteSuggestions,
+  setAliasColor,
   updateFlavorNode,
 } from "../src/app/actions";
 import { computeNoteSetHash } from "../src/lib/note-set-hash";
@@ -137,6 +138,39 @@ async function main() {
   // 값이 그대로 style 에 들어가므로 형식을 막는다
   const bad = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "red");
   ok(!bad.ok, "hex 가 아닌 색은 거절한다");
+
+  // ── 별칭 색이 축 색을 이긴다 (설계 §6). **DB 로만 확인된다** —
+  //    SellerNote 에서 NoteAlias 로 가는 FK 가 없어 이 맞물림이 전부 앱 안에서 일어나고,
+  //    normalizeName 으로 문자열을 접어 맞춘다. 단위 테스트는 그 함수까지만 본다
+  const aliasRow = await prisma.noteAlias.findFirstOrThrow({
+    where: { raw: RAW },
+    select: { id: true, nodeId: true },
+  });
+  const axis = (await getProductDetail(product.id))?.notes[0]?.nodeColor;
+  // **`before` 를 쓰면 안 된다** — 위의 격하가 이미 해시를 바꿔 놨다.
+  // 색이 해시를 안 건드린다는 주장은 색을 바꾸기 직전 값과 견줘야 성립한다
+  const beforeColor = await hashOf(product.id);
+
+  const aliasPainted = await setAliasColor(aliasRow.id, "#abcdef");
+  ok(aliasPainted.ok, `별칭에 색을 준다${aliasPainted.ok ? "" : ` — ${aliasPainted.message}`}`);
+  ok(
+    (await getProductDetail(product.id))?.notes[0]?.nodeColor === "#abcdef",
+    "별칭 색이 축 색을 이긴다",
+  );
+  ok(await hashOf(product.id) === beforeColor, "색을 줘도 noteSetHash 가 안 바뀐다 — 동일성 키 밖이다");
+  ok(
+    (await prisma.sellerNote.findFirstOrThrow({ where: { productId: product.id }, select: { nodeId: true } }))
+      .nodeId === aliasRow.nodeId,
+    "색을 줘도 축은 안 움직인다",
+  );
+
+  const unpainted = await setAliasColor(aliasRow.id, "");
+  ok(unpainted.ok, "별칭 색을 비운다");
+  ok(
+    (await getProductDetail(product.id))?.notes[0]?.nodeColor === axis,
+    "비우면 축의 색으로 돌아간다",
+  );
+  ok(!(await setAliasColor(aliasRow.id, "rebeccapurple")).ok, "hex 가 아닌 별칭 색은 거절한다");
 
   // ── 총칭이 갈 자리가 있다 (설계 §4). actions.ts 의 레벨 제한이 돌아오면 여기서 걸린다.
   // **`플로럴` 로는 이 검사가 안 된다** — 별칭 `Floral` 이 이미 L1 을 가리켜서

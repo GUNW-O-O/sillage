@@ -125,6 +125,9 @@ model NoteAlias {
   /// 정규화 값. unique 대상이라 별도 컬럼에 저장한다 (8장 「Prisma 로 안 되는 것」)
   normalizedRaw String
   nodeId        String
+  /// 이 표현만의 색. null 이면 앉은 축에서 물려받는다 (설계 2026-09-08 §6).
+  /// **기본은 상속이다** — 표현마다 색을 정하는 것이 아니라, 축 색이 안 맞는 것만 덮는다
+  color         String?
   scope         AliasScope @default(PERSONAL)
   createdById   String?
   /// 서로 다른 유저 수. 승격 판단용 (5장)

@@ -247,3 +247,44 @@ test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되�
     await prisma.flavorNode.update({ where: { id: "citrus" }, data: { color: before.color } });
   }
 });
+
+test("별칭에 제 색을 주면 띠가 축 색 대신 그것을 쓴다", async ({ page }) => {
+  // 별칭은 시드 데이터라 cleanup 이 안 건드린다. 끝나고 되돌린다
+  const alias = await prisma.noteAlias.findFirstOrThrow({
+    where: { raw: "자스민" },
+    select: { id: true, color: true, nodeId: true },
+  });
+  const p = await seedProduct("별칭색", [{ raw: "자스민", nodeId: alias.nodeId }]);
+
+  try {
+    await page.goto("/admin/flavors");
+    await page.getByTestId(`node-${alias.nodeId}`).getByRole("button", { name: /^자스민/ }).click();
+
+    // 플레이스홀더는 물려받는 색을 그대로 찍으므로 DB 를 보고 만든다
+    const node = await prisma.flavorNode.findUniqueOrThrow({
+      where: { id: alias.nodeId },
+      select: { color: true, parent: { select: { color: true } } },
+    });
+    const inherited = node.color ?? node.parent?.color;
+    await typeInto(page, inherited ? `${inherited} 물려받는 중` : "색 없음", "#abcdef");
+    await clickUntilDb(
+      page.getByRole("button", { name: "색 바꾸기" }),
+      async () =>
+        (
+          await prisma.noteAlias.findUniqueOrThrow({
+            where: { id: alias.id },
+            select: { color: true },
+          })
+        ).color === "#abcdef",
+    );
+
+    // **띠가 실제로 그 색을 쓴다.** 별칭과 판매자 노트 사이에 FK 가 없어서
+    // 이 맞물림은 화면까지 와야 확인된다
+    await page.goto(`/products/${p.id}`);
+    const band = page.getByTestId("note-gradient");
+    await expect(band).toBeVisible();
+    expect(await band.getAttribute("style")).toContain("#abcdef");
+  } finally {
+    await prisma.noteAlias.update({ where: { id: alias.id }, data: { color: alias.color } });
+  }
+});
