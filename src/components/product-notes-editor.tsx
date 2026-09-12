@@ -10,6 +10,8 @@ import {
   type ProductDetail,
 } from "@/app/actions";
 
+import { mixOnCanvas, readableOn } from "@/lib/readable-on";
+
 import { Check, Pencil } from "./icons";
 
 // 여기서 고칠 수 있는 것은 **표기와 제품명**이다.
@@ -23,6 +25,26 @@ import { Check, Pencil } from "./icons";
 // 설계 4-3 개정이 안전하다고 한 것은 데이터가 안 깨진다는 뜻이지 남이 내 기록을
 // 늘려도 된다는 뜻이 아니었다.
 const VERDICT = { STRONG: "강함", WEAK: "약함", UNSURE: "모르겠음", MISS: "못 느낌" } as const;
+
+/// 사람들이 이 노트를 얼마나 느꼈나를 색의 짙기로 옮긴다.
+///
+/// **기록 시트와 같은 눈금이다** — 거기서 내 판정이 강함이면 원색, 약함이면 절반이었다.
+/// 여기서는 그것을 사람 수로 평균 낸다. 모두가 강하게 느꼈으면 원색, 절반만 약하게
+/// 느꼈으면 옅은 톤이다. 그래서 상세의 노트와 시트의 칩이 같은 척도로 읽힌다.
+///
+/// 아무도 안 느꼈거나(0) 축이 없어 색이 없으면 칠하지 않는다 — 없는 것을 회색으로
+/// 채우지 않는 것과 같은 이유다 (설계 2026-09-08 §6).
+function feltTone(
+  counts: NoteDistribution["counts"],
+  color: string | null,
+  sampleSize: number,
+): React.CSSProperties | undefined {
+  if (!color || sampleSize <= 0) return undefined;
+  const felt = (counts.STRONG + counts.WEAK * 0.5) / sampleSize;
+  if (felt <= 0) return undefined;
+  const bg = mixOnCanvas(color, Math.min(felt, 1));
+  return { backgroundColor: bg, color: readableOn(bg) };
+}
 
 /// 표본 1일 때 그 한 사람이 무엇을 골랐나
 function soleVerdict(counts: NoteDistribution["counts"]): string {
@@ -96,16 +118,25 @@ export function ProductNotesEditor({
           아래 내용이 화면 밖으로 밀린다.
           **수정할 때는 행으로 되돌린다** — 인라인 입력과 지우기 버튼이 폭을 요구한다 */}
       <ul className={editing ? "mt-4 space-y-2" : "mt-4 flex flex-wrap gap-2"}>
-        {notes.map((n) => (
+        {notes.map((n) => {
+          const tone = editing ? undefined : feltTone(n.counts, n.nodeColor, sampleSize);
+          // 칠해진 칸에서는 글자색 클래스가 인라인 색을 덮어 버린다. 상속하게 두고
+          // 위계는 투명도로 준다 — 어느 색이 깔려도 같은 위계가 유지된다
+          const strong = tone ? "" : "text-ink";
+          const weak = tone ? "opacity-70" : "text-muted";
+          const num = tone ? "font-medium" : "text-accent";
+          return (
           <li
             key={n.id}
-            className={`rounded-[10px] bg-surface-raised px-4 py-3 ${editing ? "" : "min-w-[104px]"}`}
+            data-testid={`note-${n.id}`}
+            style={tone}
+            className={`rounded-[10px] px-4 py-3 ${editing ? "" : "min-w-[104px]"} ${tone ? "" : "bg-surface-raised"}`}
           >
             <div className={editing ? "flex items-baseline justify-between gap-3" : ""}>
-              <span className="min-w-0 text-[16px] font-medium text-ink">
+              <span className={`min-w-0 text-[16px] font-medium ${strong}`}>
                 {n.raw}
                 {n.nodeLabel ? (
-                  <span className="ml-2 text-[12px] font-normal text-muted">{n.nodeLabel}</span>
+                  <span className={`ml-2 text-[12px] font-normal ${weak}`}>{n.nodeLabel}</span>
                 ) : (
                   <span className="ml-2 text-[12px] font-normal text-pending">미분류</span>
                 )}
@@ -121,12 +152,12 @@ export function ProductNotesEditor({
                 `1 / 1` 로는 `모르겠음` 과 `못 느낌` 도 구분되지 않는다 — 그 한 사람의
                 판정을 그대로 적는 것이 같은 자리에 더 많은 것을 담는다 */}
             {!editing && sampleSize === 1 && (
-              <div className="text-[12px] text-muted">{soleVerdict(n.counts)}</div>
+              <div className={`text-[12px] ${weak}`}>{soleVerdict(n.counts)}</div>
             )}
             {!editing && sampleSize > 1 && (
-              <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted">
+              <div className={`mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px] ${weak}`}>
                 <span className="tabular">
-                  <span className="text-accent">{n.hitCount}</span> / {sampleSize}
+                  <span className={num}>{n.hitCount}</span> / {sampleSize}
                 </span>
                 <span>강함 {n.counts.STRONG}</span>
                 <span>약함 {n.counts.WEAK}</span>
@@ -152,7 +183,8 @@ export function ProductNotesEditor({
               </div>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       {/* 판매자가 안 적었는데 사람들이 느낀 향 (ExtraNote).

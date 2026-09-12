@@ -226,3 +226,46 @@ test("판정을 순환해도 칩 크기가 안 변하고 콘솔이 조용하다"
   expect([...sizes], "판정이 바뀔 때 칩 크기가 달라진다").toHaveLength(1);
   expect(errors, "순환 중 콘솔 오류가 났다").toEqual([]);
 });
+
+test("원두 정보의 노트는 사람들이 느낀 만큼 짙어진다", async ({ page }) => {
+  const p = await seedProduct("느낀만큼", [
+    { raw: "자스민", nodeId: "flower" },
+    { raw: "블루베리", nodeId: "berry" },
+  ]);
+  // 한 사람이 자스민만 강하게 느꼈다 — 자스민은 원색, 블루베리는 안 칠해진다
+  await seedRecord(p.id, [{ sellerNoteId: p.sellerNotes[0].id, value: "STRONG" }]);
+
+  await page.goto(`/products/${p.id}`);
+
+  const bg = (id: string) =>
+    page.getByTestId(`note-${id}`).evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  // 기록 시트와 같은 눈금이다 — 모두가 강하게 느꼈으면 원색
+  expect(await bg(p.sellerNotes[0].id)).toBe(asRgb(await colorOf("flower")));
+
+  // **아무도 안 느낀 노트는 안 칠한다.** 없는 것을 회색으로 채우지 않는 것과 같다
+  expect(await bg(p.sellerNotes[1].id)).not.toBe(asRgb(await colorOf("fruity")));
+});
+
+test("기록이 있으면 원두 상세에서 라우트로 안 나가고 시트로 연다", async ({ page }) => {
+  const p = await seedProduct("시트진입", [{ raw: "자스민", nodeId: "flower" }]);
+  await seedRecord(p.id, [{ sellerNoteId: p.sellerNotes[0].id, value: "STRONG" }]);
+
+  await page.goto(`/products/${p.id}`);
+  await clickUntil(
+    page.getByRole("button", { name: "내 기록 보기" }),
+    page.getByTestId("note-judgements"),
+  );
+
+  // **주소가 그대로다** — 보러 여는 것이라 맥락을 잃지 않는다 (record-list 와 같은 규칙)
+  expect(new URL(page.url()).pathname).toBe(`/products/${p.id}`);
+  await expect(page.getByTestId("note-judgements")).toContainText("강함");
+});
+
+test("기록이 없으면 기록 입력은 라우트로 간다 — 작업이라 시트에 안 담는다", async ({ page }) => {
+  const p = await seedProduct("라우트진입", [{ raw: "자스민", nodeId: "flower" }]);
+
+  await page.goto(`/products/${p.id}`);
+  await page.getByRole("link", { name: "기록 입력" }).click();
+  await expect(page).toHaveURL(new RegExp(`/products/${p.id}/record$`));
+});

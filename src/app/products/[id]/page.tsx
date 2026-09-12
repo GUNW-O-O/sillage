@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getProductDetail, listProductProposals } from "@/app/actions";
 import { noteGradient } from "@/lib/note-gradient";
 import { NoteProposals } from "@/components/note-proposals";
+import { RecordEntryBar } from "@/components/record-entry-bar";
 import { ProductNotesEditor } from "@/components/product-notes-editor";
 import { ProductSpecEditor } from "@/components/product-spec-editor";
 
@@ -54,16 +55,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[id]"
 
       <NoteProposals productId={product.id} proposals={proposals} />
 
-      <div className="fixed inset-x-0 bottom-0 border-t border-hairline bg-surface-raised">
-        <div className="mx-auto w-full max-w-[560px] px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
-          <Link
-            href={`/products/${product.id}/record`}
-            className="flex h-12 w-full items-center justify-center rounded-[10px] bg-cta text-[16px] font-semibold text-on-cta"
-          >
-            {product.hasMyRecord ? "내 기록 보기" : "기록 입력"}
-          </Link>
-        </div>
-      </div>
+      <RecordEntryBar productId={product.id} hasMyRecord={product.hasMyRecord} />
     </main>
   );
 }
