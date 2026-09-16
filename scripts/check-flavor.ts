@@ -121,13 +121,23 @@ async function main() {
   // ── 색은 어드민이 덮어쓰고, 비우면 상속으로 돌아간다 (설계 §6).
   //    **되돌릴 수단이 없으면 한 번 잘못 넣은 색을 영영 못 뺀다.** 그래서 빈 문자열이
   //    「지운다」의 뜻인지를 여기서 지킨다 — 화면만으로는 확인이 안 되는 자리다
-  const painted = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "#123456");
+  const painted = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "#6569ab");
   ok(painted.ok, `색을 덮어쓴다${painted.ok ? "" : ` — ${painted.message}`}`);
   ok(
     (await prisma.flavorNode.findUniqueOrThrow({ where: { id: NODE }, select: { color: true } }))
-      .color === "#123456",
+      .color === "#6569ab",
     "덮어쓴 색이 노드에 남는다",
   );
+
+  // ── 색표 밖의 색은 거절하되, 이미 저장된 색은 그대로 둔다 (2026-09-16).
+  //    색표 이전에 손으로 고른 값이 DB 에 있다 — 라벨만 고치는 저장이 그 색에 막히면 안 된다
+  ok(
+    !(await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "#123456")).ok,
+    "색표에 없는 색은 거절한다",
+  );
+  await prisma.flavorNode.update({ where: { id: NODE }, data: { color: "#123456" } });
+  const kept = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축2`, "Check Move", "#123456");
+  ok(kept.ok, `색표 밖이어도 지금 색 그대로면 저장된다${kept.ok ? "" : ` — ${kept.message}`}`);
   const cleared = await updateFlavorNode(NODE, "green_vegetative", `${TAG}축`, "Check Move", "");
   ok(cleared.ok, "색을 비운다");
   ok(
@@ -151,10 +161,10 @@ async function main() {
   // 색이 해시를 안 건드린다는 주장은 색을 바꾸기 직전 값과 견줘야 성립한다
   const beforeColor = await hashOf(product.id);
 
-  const aliasPainted = await setAliasColor(aliasRow.id, "#abcdef");
+  const aliasPainted = await setAliasColor(aliasRow.id, "#e32e86");
   ok(aliasPainted.ok, `별칭에 색을 준다${aliasPainted.ok ? "" : ` — ${aliasPainted.message}`}`);
   ok(
-    (await getProductDetail(product.id))?.notes[0]?.nodeColor === "#abcdef",
+    (await getProductDetail(product.id))?.notes[0]?.nodeColor === "#e32e86",
     "별칭 색이 축 색을 이긴다",
   );
   ok(await hashOf(product.id) === beforeColor, "색을 줘도 noteSetHash 가 안 바뀐다 — 동일성 키 밖이다");
@@ -171,6 +181,7 @@ async function main() {
     "비우면 축의 색으로 돌아간다",
   );
   ok(!(await setAliasColor(aliasRow.id, "rebeccapurple")).ok, "hex 가 아닌 별칭 색은 거절한다");
+  ok(!(await setAliasColor(aliasRow.id, "#123456")).ok, "색표에 없는 별칭 색은 거절한다");
 
   // ── 총칭이 갈 자리가 있다 (설계 §4). actions.ts 의 레벨 제한이 돌아오면 여기서 걸린다.
   // **`플로럴` 로는 이 검사가 안 된다** — 별칭 `Floral` 이 이미 L1 을 가리켜서

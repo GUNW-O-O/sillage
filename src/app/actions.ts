@@ -26,6 +26,7 @@ import {
 import { issueSession } from "@/lib/auth/session";
 import { findExistingLookup } from "@/lib/lookup-match";
 import { computeNoteSetHash } from "@/lib/note-set-hash";
+import { isAllowedColor } from "@/lib/color-palette";
 import { aliasColorMap, noteColor } from "@/lib/flavor-color";
 import { normalizeName } from "@/lib/normalize";
 import { MIN_QUERY_LENGTH } from "@/lib/search-tuning";
@@ -1242,6 +1243,9 @@ export async function createFlavorNodeL2(
   return { ok: true };
 }
 
+/// 형식 검사(hex)와 따로 둔다 — 형식은 style 주입을 막고, 색표는 톤을 지킨다
+const PALETTE_ONLY = "색은 색표에서 골라 주세요";
+
 /// 노드의 라벨과 부모를 고친다 (설계 2026-09-08 §7).
 /// **id 는 안 바꾼다** — 집계 축이라 바꾸는 순간 데이터 마이그레이션이다.
 /// 부모만 옮기는 것은 `nodeId` 가 그대로라 `noteSetHash` 가 안 움직인다 — 소급이 없다.
@@ -1271,8 +1275,9 @@ export async function updateFlavorNode(
     return { ok: false, message: "색은 #rrggbb 여섯 자리로 적어요" };
   }
 
-  const node = await prisma.flavorNode.findUnique({ where: { id }, select: { level: true } });
+  const node = await prisma.flavorNode.findUnique({ where: { id }, select: { level: true, color: true } });
   if (!node) return { ok: false, message: "없는 노드예요" };
+  if (!isAllowedColor(hex, node.color)) return { ok: false, message: PALETTE_ONLY };
 
   // 레벨을 따로 받지 않는다 — 부모가 없으면 L1, 있으면 L2 로 이미 정해진다.
   // 그리고 그 레벨이 지금과 달라지는 이동은 막는다. L1 은 골격이고(설계 7-4),
@@ -1711,8 +1716,9 @@ export async function setAliasColor(aliasId: string, color: string): Promise<Adm
   if (hex && !/^#[0-9a-fA-F]{6}$/.test(hex)) {
     return { ok: false, message: "색은 #rrggbb 여섯 자리로 적어요" };
   }
-  const alias = await prisma.noteAlias.findUnique({ where: { id: aliasId }, select: { id: true } });
+  const alias = await prisma.noteAlias.findUnique({ where: { id: aliasId }, select: { color: true } });
   if (!alias) return { ok: false, message: "없는 표현이에요" };
+  if (!isAllowedColor(hex, alias.color)) return { ok: false, message: PALETTE_ONLY };
 
   await prisma.noteAlias.update({ where: { id: aliasId }, data: { color: hex || null } });
   revalidate("/admin");

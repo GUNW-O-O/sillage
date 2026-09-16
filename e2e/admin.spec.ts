@@ -9,7 +9,6 @@ import {
   seedProduct,
   TAG,
   typeAndClick,
-  typeInto,
   USER,
 } from "./helpers";
 import { normalizeName } from "../src/lib/normalize";
@@ -191,6 +190,8 @@ test("향 계층이 제 색과 상속을 구별해 보여준다", async ({ page 
 });
 
 test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되돌린다", async ({ page }) => {
+  const colorOfFruity = async () =>
+    (await prisma.flavorNode.findUniqueOrThrow({ where: { id: "fruity" }, select: { color: true } })).color;
   // 원래 색으로 되돌려 놓는다 — 시드 노드라 cleanup 이 안 건드린다
   const before = await prisma.flavorNode.findUniqueOrThrow({
     where: { id: "citrus" },
@@ -198,6 +199,9 @@ test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되�
   });
 
   try {
+    // 상속 상태에서 시작한다. 어드민이 citrus 에 색을 넣어 두면 「물려받는 중」 이 안 뜬다 —
+    // 실제로 그렇게 떨어졌다 (2026-09-16)
+    await prisma.flavorNode.update({ where: { id: "citrus" }, data: { color: null } });
     await page.goto("/admin/flavors");
     const card = page.getByTestId("node-citrus");
     // 모달은 포털이 아니라 이 카드 안에 렌더된다 — 카드 밖에서 `.last()` 를 잡으면
@@ -206,12 +210,11 @@ test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되�
     const submit = card.getByRole("button", { name: "고치기", exact: true }).last();
     await open.click();
 
-    // 지금은 `과일` 색을 물려받는 중이다. 그 사실이 칸에 보여야 비울지 말지를 판단한다
-    await expect(page.getByPlaceholder("#b1503f 물려받는 중")).toBeVisible();
+    // 지금은 `과일` 색을 물려받는 중이다. 그 사실이 보여야 비울지 말지를 판단한다
+    await expect(card.getByText(`${await colorOfFruity()} 물려받는 중`)).toBeVisible();
 
-    // **`fill` 이 아니라 실제 타이핑이다.** fill 은 React 상태에 안 들어가는 경우가 있어
-    // 값은 보이는데 저장되는 것은 빈 문자열이 된다 (helpers.ts 의 함정 넷째)
-    await typeInto(page, "#b1503f 물려받는 중", "#c2a42a");
+    // 색은 색표에서만 고른다 (2026-09-16). 누른 색이 「지금 색」 자리에 올라와야 저장한다
+    await clickUntil(card.getByRole("button", { name: "Lemon", exact: true }), card.getByText("Lemon #f6d800"));
     await clickUntilDb(
       submit,
       async () =>
@@ -220,11 +223,11 @@ test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되�
             where: { id: "citrus" },
             select: { color: true },
           })
-        ).color === "#c2a42a",
+        ).color === "#f6d800",
     );
 
     // 점이 제 색으로 채워진다 — 더는 상속이 아니다
-    await expect(page.getByTestId("dot-citrus")).toHaveAttribute("title", "#c2a42a");
+    await expect(page.getByTestId("dot-citrus")).toHaveAttribute("title", "#f6d800");
 
     // 비우면 상속으로 돌아간다. **되돌릴 수단이 없으면 잘못 넣은 색을 영영 못 뺀다**
     await open.click();
@@ -241,7 +244,7 @@ test("「고치기」로 축의 색을 덮어쓰고 비워서 상속으로 되�
     );
     await expect(page.getByTestId("dot-citrus")).toHaveAttribute(
       "title",
-      "#b1503f (부모에서 물려받음)",
+      `${await colorOfFruity()} (부모에서 물려받음)`,
     );
   } finally {
     await prisma.flavorNode.update({ where: { id: "citrus" }, data: { color: before.color } });
@@ -266,7 +269,11 @@ test("별칭에 제 색을 주면 띠가 축 색 대신 그것을 쓴다", async
       select: { color: true, parent: { select: { color: true } } },
     });
     const inherited = node.color ?? node.parent?.color;
-    await typeInto(page, inherited ? `${inherited} 물려받는 중` : "색 없음", "#abcdef");
+    await expect(page.getByText(inherited ? `${inherited} 물려받는 중` : "색 없음")).toBeVisible();
+    await clickUntil(
+      page.getByRole("button", { name: "Raspberry", exact: true }),
+      page.getByText("Raspberry #e32e86"),
+    );
     await clickUntilDb(
       page.getByRole("button", { name: "색 바꾸기" }),
       async () =>
@@ -275,7 +282,7 @@ test("별칭에 제 색을 주면 띠가 축 색 대신 그것을 쓴다", async
             where: { id: alias.id },
             select: { color: true },
           })
-        ).color === "#abcdef",
+        ).color === "#e32e86",
     );
 
     // **띠가 실제로 그 색을 쓴다.** 별칭과 판매자 노트 사이에 FK 가 없어서
@@ -283,7 +290,7 @@ test("별칭에 제 색을 주면 띠가 축 색 대신 그것을 쓴다", async
     await page.goto(`/products/${p.id}`);
     const band = page.getByTestId("note-gradient");
     await expect(band).toBeVisible();
-    expect(await band.getAttribute("style")).toContain("#abcdef");
+    expect(await band.getAttribute("style")).toContain("#e32e86");
   } finally {
     await prisma.noteAlias.update({ where: { id: alias.id }, data: { color: alias.color } });
   }

@@ -10,6 +10,7 @@ import {
   updateFlavorNode,
 } from "@/app/actions";
 
+import { ColorSwatchPicker } from "./color-swatch-picker";
 import { Modal } from "./modal";
 
 function useSubmit() {
@@ -239,35 +240,10 @@ export function EditFlavorNode({
           <Text label="한글 라벨" value={labelKo} onChange={setKo} />
           <Text label="영문 라벨" value={labelEn} onChange={setEn} />
 
-          {/* 색은 상속이 기본이다 — 비우면 부모 색으로 돌아간다 (설계 2026-09-08 §6).
-              색판과 글자 칸을 함께 둔다. 색판만 두면 지금 값이 무엇인지 못 읽고,
-              글자 칸만 두면 hex 를 손으로 맞춰야 한다 */}
+          {/* 색은 상속이 기본이다 — 비우면 부모 색으로 돌아간다 (설계 2026-09-08 §6) */}
           <div className="mb-3">
             <span className="mb-1.5 block text-[13px] text-muted">색</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                aria-label="색 고르기"
-                value={color || inheritedColor || "#888888"}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-11 w-14 shrink-0 cursor-pointer rounded-[10px] bg-surface-sunken p-1"
-              />
-              <input
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                placeholder={inheritedColor ? `${inheritedColor} 물려받는 중` : "색 없음"}
-                className="h-11 min-w-0 flex-1 rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none placeholder:text-muted-soft"
-              />
-              {color && (
-                <button
-                  type="button"
-                  onClick={() => setColor("")}
-                  className="h-11 shrink-0 rounded-[10px] border border-hairline px-3 text-[13px] text-muted"
-                >
-                  비우기
-                </button>
-              )}
-            </div>
+            <ColorSwatchPicker value={color} inherited={inheritedColor} onChange={setColor} />
             <p className="mt-1.5 text-[12px] text-muted-soft">
               비우면 {inheritedColor ? "부모 색을 물려받아요" : "색이 없어져서 띠에서 빠져요"}.
             </p>

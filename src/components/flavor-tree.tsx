@@ -7,6 +7,7 @@ import { mergeAlias, remapAlias, setAliasColor, unmapAlias, type FlavorTreeNode 
 import { readableOn } from "@/lib/readable-on";
 
 import { AddFlavorNode, EditFlavorNode } from "./admin-create";
+import { ColorSwatchPicker } from "./color-swatch-picker";
 import { Modal } from "./modal";
 
 type L1 = FlavorTreeNode & { children: FlavorTreeNode[] };
@@ -206,31 +207,19 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
               그래서 옮기기 목록과 나란히 두지 않고 위에 따로 둔다 */}
           <div className="mb-5 rounded-[10px] border border-hairline p-3">
             <span className="mb-1.5 block text-[13px] text-muted">이 표현만의 색</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                aria-label="색 고르기"
-                value={aliasColor || target.inherited || "#888888"}
-                onChange={(e) => setAliasColor_(e.target.value)}
-                className="h-11 w-14 shrink-0 cursor-pointer rounded-[10px] bg-surface-sunken p-1"
-              />
-              <input
-                value={aliasColor}
-                onChange={(e) => setAliasColor_(e.target.value)}
-                placeholder={
-                  target.inherited ? `${target.inherited} 물려받는 중` : "색 없음"
-                }
-                className="h-11 min-w-0 flex-1 rounded-[10px] bg-surface-sunken px-3.5 text-[15px] text-ink outline-none placeholder:text-muted-soft"
-              />
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => run(() => setAliasColor(target.id, aliasColor))}
-                className="h-11 shrink-0 rounded-[10px] bg-cta px-4 text-[14px] font-semibold text-on-cta"
-              >
-                색 바꾸기
-              </button>
-            </div>
+            <ColorSwatchPicker
+              value={aliasColor}
+              inherited={target.inherited}
+              onChange={setAliasColor_}
+            />
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => setAliasColor(target.id, aliasColor))}
+              className="mt-2 h-11 w-full rounded-[10px] bg-cta text-[14px] font-semibold text-on-cta"
+            >
+              색 바꾸기
+            </button>
             <p className="mt-1.5 text-[12px] text-muted-soft">
               비우고 눌러요 → {target.inherited ? "축의 색을 물려받아요" : "색이 없어져요"}.
               판정값도 noteSetHash 도 안 움직여요.
