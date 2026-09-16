@@ -193,9 +193,17 @@ export async function searchNoteSuggestions(query: string): Promise<NoteSuggesti
 
   const [aliases, nodes] = await Promise.all([
     prisma.noteAlias.findMany({
-      where: { normalizedRaw: { contains: normalizeName(q) } },
+      // 병합된 영문 표기도 훑는다. 칸을 따로 둔 이유가 이 부분 일치다 (`berga`)
+      where: {
+        OR: [
+          { normalizedRaw: { contains: normalizeName(q) } },
+          { normalizedEn: { contains: normalizeName(q) } },
+        ],
+      },
       select: {
         raw: true,
+        rawEn: true,
+        normalizedRaw: true,
         nodeId: true,
         node: { select: { labelKo: true, parent: { select: { labelKo: true } } } },
       },
@@ -217,9 +225,12 @@ export async function searchNoteSuggestions(query: string): Promise<NoteSuggesti
   const seen = new Set<string>();
   const out: NoteSuggestion[] = [];
   for (const a of aliases) {
-    if (seen.has(a.raw)) continue;
-    seen.add(a.raw);
-    out.push({ raw: a.raw, nodeId: a.nodeId, path: nodePath(a.node) });
+    // 친 쪽 표기를 내준다. 고른 raw 가 그대로 판매자 노트가 되므로 `berga` 에 `베르가못` 을
+    // 주면 사용자가 쓰려던 말이 바뀐다. 한글 칸에서도 걸리면 한글이 먼저다
+    const raw = a.rawEn && !a.normalizedRaw.includes(normalizeName(q)) ? a.rawEn : a.raw;
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    out.push({ raw, nodeId: a.nodeId, path: nodePath(a.node) });
   }
   for (const n of nodes) {
     if (seen.has(n.labelKo)) continue;
@@ -892,8 +903,12 @@ export async function attachNote(raw: string, nodeId: string): Promise<AdminResu
     // upsert 를 쓸 수 없다 — public 유일성은 부분 유니크 인덱스로 걸려 있고
     // (createdById 가 NULL 이라 복합 unique 가 동작하지 않는다) Prisma 는 부분 인덱스를
     // where 대상으로 잡지 못한다
+    // 영문 칸도 본다 — 병합으로 지운 표기가 새 행으로 되살아나지 않게
     const existing = await tx.noteAlias.findFirst({
-      where: { normalizedRaw, scope: AliasScope.PUBLIC },
+      where: {
+        OR: [{ normalizedRaw }, { normalizedEn: normalizedRaw }],
+        scope: AliasScope.PUBLIC,
+      },
       select: { id: true },
     });
     if (existing) {
@@ -1612,7 +1627,7 @@ async function paintedAliases() {
   return aliasColorMap(
     await prisma.noteAlias.findMany({
       where: { color: { not: null } },
-      select: { raw: true, color: true },
+      select: { raw: true, rawEn: true, color: true },
     }),
   );
 }
@@ -1623,7 +1638,7 @@ export type FlavorTreeNode = {
   labelEn: string;
   /// 이 노드로 붙인 표현들. 잘못 앉은 것을 찾는 유일한 방법이다.
   /// `color` 는 이 표현만의 덮어쓰기 — null 이면 축에서 물려받는다
-  aliases: { id: string; raw: string; scope: string; color: string | null }[];
+  aliases: { id: string; raw: string; rawEn: string | null; scope: string; color: string | null }[];
   /// 이 노드에 직접 박힌 색. 없으면 null 이고 부모 것으로 칠해진다
   color: string | null;
   /// 화면이 실제로 칠하는 색 — 자기 색이 없으면 부모에서 상속한다 (설계 2026-09-08 §6).
@@ -1649,7 +1664,7 @@ export async function listFlavorTreeDetailed() {
       orderBy: [{ level: "asc" }, { labelKo: "asc" }],
     }),
     prisma.noteAlias.findMany({
-      select: { id: true, raw: true, nodeId: true, scope: true, color: true },
+      select: { id: true, raw: true, rawEn: true, nodeId: true, scope: true, color: true },
       orderBy: { raw: "asc" },
     }),
   ]);
@@ -1657,7 +1672,7 @@ export async function listFlavorTreeDetailed() {
   const aliasBy = new Map<string, FlavorTreeNode["aliases"]>();
   for (const a of aliases) {
     const list = aliasBy.get(a.nodeId) ?? [];
-    list.push({ id: a.id, raw: a.raw, scope: a.scope, color: a.color });
+    list.push({ id: a.id, raw: a.raw, rawEn: a.rawEn, scope: a.scope, color: a.color });
     aliasBy.set(a.nodeId, list);
   }
 
@@ -1706,6 +1721,57 @@ export async function setAliasColor(aliasId: string, color: string): Promise<Adm
   return { ok: true };
 }
 
+/// 별칭 한 행이 덮는 표기 전부. 판매자 노트는 FK 가 아니라 raw 문자열로 맞물린다
+const aliasRaws = (a: { raw: string; rawEn: string | null }) => (a.rawEn ? [a.raw, a.rawEn] : [a.raw]);
+
+/// 같은 향의 한영 표기(`Bergamot` → `베르가못`)를 한 행으로 합친다. 소스의 raw 가 타깃의
+/// rawEn 으로 들어가고 소스 행은 지워진다 — `mergeLookup` 과 같은 모양이다 (설계 4-3).
+/// **같은 축끼리만 합친다.** 축이 같으니 판매자 노트의 nodeId 도 noteSetHash 도 안 움직인다.
+/// 다른 축이면 먼저 옮기라고 돌려보낸다 — 합치기가 옮기기를 겸하면 해시 충돌 처리가 섞인다
+export async function mergeAlias(sourceId: string, targetId: string): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+  if (sourceId === targetId) return { ok: false, message: "같은 표현이에요" };
+
+  return prisma
+    .$transaction(async (tx) => {
+      const [source, target] = await Promise.all([
+        tx.noteAlias.findUniqueOrThrow({ where: { id: sourceId } }),
+        tx.noteAlias.findUniqueOrThrow({ where: { id: targetId } }),
+      ]);
+      if (source.nodeId !== target.nodeId) {
+        throw new Error("축이 달라요. 한쪽을 먼저 같은 축으로 옮겨 주세요");
+      }
+      // 칸이 하나라 셋째 표기를 받을 자리가 없다
+      if (source.rawEn || target.rawEn) throw new Error("이미 합쳐진 표현이에요");
+      // 소스의 색을 버리면 칠해지던 노트의 색이 조용히 바뀐다. 사람이 먼저 고르게 한다
+      if (source.color && source.color !== target.color) {
+        throw new Error("합칠 표현에만 색이 있어요. 색을 먼저 맞춰 주세요");
+      }
+
+      await tx.noteAlias.delete({ where: { id: sourceId } });
+      await tx.noteAlias.update({
+        where: { id: targetId },
+        data: {
+          rawEn: source.raw,
+          normalizedEn: source.normalizedRaw,
+          usageCount: Math.max(source.usageCount, target.usageCount),
+        },
+      });
+      return { ok: true as const };
+    })
+    .then((r) => {
+      revalidate("/admin");
+      // 띠와 판정 칩이 합쳐진 색을 쓴다
+      revalidate("/");
+      return r;
+    })
+    .catch((e: Error) => ({ ok: false as const, message: e.message }));
+}
+
 export async function remapAlias(aliasId: string, nodeId: string): Promise<AdminResult> {
   try {
     await requireAdmin();
@@ -1716,14 +1782,14 @@ export async function remapAlias(aliasId: string, nodeId: string): Promise<Admin
     .$transaction(async (tx) => {
       const alias = await tx.noteAlias.findUniqueOrThrow({
         where: { id: aliasId },
-        select: { raw: true, nodeId: true },
+        select: { raw: true, rawEn: true, nodeId: true },
       });
       if (alias.nodeId === nodeId) throw new Error("같은 축이다");
 
       await tx.noteAlias.update({ where: { id: aliasId }, data: { nodeId } });
 
       const targets = await tx.sellerNote.findMany({
-        where: { raw: alias.raw, nodeId: alias.nodeId },
+        where: { raw: { in: aliasRaws(alias) }, nodeId: alias.nodeId },
         select: { id: true, productId: true },
       });
       await tx.sellerNote.updateMany({
@@ -1758,11 +1824,11 @@ export async function unmapAlias(aliasId: string): Promise<AdminResult> {
     .$transaction(async (tx) => {
       const alias = await tx.noteAlias.findUniqueOrThrow({
         where: { id: aliasId },
-        select: { raw: true, nodeId: true },
+        select: { raw: true, rawEn: true, nodeId: true },
       });
 
       const targets = await tx.sellerNote.findMany({
-        where: { raw: alias.raw, nodeId: alias.nodeId },
+        where: { raw: { in: aliasRaws(alias) }, nodeId: alias.nodeId },
         select: { id: true, productId: true },
       });
       await tx.sellerNote.updateMany({

@@ -124,6 +124,10 @@ model NoteAlias {
   raw String
   /// 정규화 값. unique 대상이라 별도 컬럼에 저장한다 (8장 「Prisma 로 안 되는 것」)
   normalizedRaw String
+  /// 같은 향의 다른 표기(`베르가못` 의 `Bergamot`). 병합으로만 채워진다 (mergeAlias).
+  /// 배열이 아니라 칸 하나다 — 배열로 가면 자동완성의 부분 일치(`berga`)가 죽는다
+  rawEn         String?
+  normalizedEn  String?
   nodeId        String
   /// 이 표현만의 색. null 이면 앉은 축에서 물려받는다 (설계 2026-09-08 §6).
   /// **기본은 상속이다** — 표현마다 색을 정하는 것이 아니라, 축 색이 안 맞는 것만 덮는다
@@ -146,6 +150,7 @@ model NoteAlias {
   /// 노트 입력의 자동완성이 타이핑마다 이 컬럼을 `contains` 로 훑는다.
   /// 별칭은 표현이 쌓이는 만큼 무한히 는다 — 여기가 셋 중 제일 커진다
   @@index([normalizedRaw(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([normalizedEn(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // ─────────────────────────────────────────── lookup (4-8)

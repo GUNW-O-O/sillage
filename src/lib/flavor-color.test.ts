@@ -41,6 +41,13 @@ describe("noteColor", () => {
     expect(noteColor("COTTONCANDY", null, m)).toBe("#ff99cc");
   });
 
+  it("병합된 영문 표기도 같은 색으로 칠해진다", () => {
+    // 병합이 소스 행을 지운다. 영문 칸을 표에 안 담으면 `Bergamot` 판매자 노트만 축 색으로 돌아간다
+    const m = aliasColorMap([{ raw: "베르가못", rawEn: "Bergamot", color: "#aabb00" }]);
+    expect(noteColor("bergamot", L2, m)).toBe("#aabb00");
+    expect(noteColor("베르가못", L2, m)).toBe("#aabb00");
+  });
+
   it("색이 없는 별칭은 표에 안 담긴다 — 표는 덮어쓴 것만이다", () => {
     expect(map.size).toBe(1);
   });

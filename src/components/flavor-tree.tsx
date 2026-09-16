@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { remapAlias, setAliasColor, unmapAlias, type FlavorTreeNode } from "@/app/actions";
+import { mergeAlias, remapAlias, setAliasColor, unmapAlias, type FlavorTreeNode } from "@/app/actions";
 import { readableOn } from "@/lib/readable-on";
 
 import { AddFlavorNode, EditFlavorNode } from "./admin-create";
@@ -56,6 +56,9 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
     color: string | null;
     /// 비웠을 때 대신 칠해질 색 — 「지우면 무엇이 되는가」를 보여줘야 비울 수 있다
     inherited: string | null;
+    /// 합칠 수 있는 같은 축의 표현. 한 행이 표기를 둘까지만 담아서 이미 합쳐진 것은 뺀다
+    siblings: { id: string; raw: string }[];
+    merged: boolean;
   } | null>(null);
   const [aliasColor, setAliasColor_] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +146,10 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                                   nodeLabel: l2.labelKo,
                                   color: a.color,
                                   inherited: l2.effectiveColor,
+                                  siblings: l2.aliases
+                                    .filter((b) => b.id !== a.id && !b.rawEn)
+                                    .map((b) => ({ id: b.id, raw: b.raw })),
+                                  merged: !!a.rawEn,
                                 });
                                 setAliasColor_(a.color ?? "");
                               }
@@ -163,7 +170,7 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
                               a.color ?? l2.effectiveColor ? "" : "bg-surface-card text-body"
                             }`}
                           >
-                            {a.raw}
+                            {a.rawEn ? `${a.raw} · ${a.rawEn}` : a.raw}
                             {a.scope === "PERSONAL" && (
                               <span className="ml-1 text-[10px] opacity-70">개인</span>
                             )}
@@ -229,6 +236,32 @@ export function FlavorTree({ tree }: { tree: L1[] }) {
               판정값도 noteSetHash 도 안 움직여요.
             </p>
           </div>
+
+          {/* 같은 향의 한영 표기를 한 행으로. 축이 같은 것끼리만 되므로 같은 칸의 표현만 보인다 */}
+          {!target.merged && target.siblings.length > 0 && (
+            <div className="mb-5 rounded-[10px] border border-hairline p-3">
+              <span className="mb-1.5 block text-[13px] text-muted">같은 향의 다른 표기와 합치기</span>
+              <div className="flex flex-wrap gap-1.5">
+                {target.siblings.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!confirm(`“${target.raw}” 를 “${b.raw}” 의 다른 표기로 합칠까요?`)) return;
+                      run(() => mergeAlias(target.id, b.id));
+                    }}
+                    className="inline-flex min-h-10 items-center rounded-full border border-hairline bg-surface-raised px-3.5 text-[14px] text-body"
+                  >
+                    {b.raw}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[12px] text-muted-soft">
+                이 표현은 고른 표현의 영문 표기로 들어가고 칩이 하나로 줄어요. 판정값은 그대로예요.
+              </p>
+            </div>
+          )}
 
           {tree.map((l1) => (
             <div key={l1.id} className="mb-4 last:mb-0">

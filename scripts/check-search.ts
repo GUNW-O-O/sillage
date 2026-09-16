@@ -25,6 +25,7 @@ const INDEXED = [
   { table: "Vendor", column: "normalizedName", why: "로스터리 검색" },
   { table: "Product", column: "normalizedName", why: "원두명 검색" },
   { table: "NoteAlias", column: "normalizedRaw", why: "노트 자동완성" },
+  { table: "NoteAlias", column: "normalizedEn", why: "노트 자동완성 — 병합된 영문 표기" },
 ];
 
 async function main() {

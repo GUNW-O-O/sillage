@@ -26,6 +26,7 @@ export const ADMIN_ACTIONS = [
   "updateFlavorNode",
   "createNodeAndAttach",
   // 별칭
+  "mergeAlias",
   "remapAlias",
   "setAliasColor",
   "unmapAlias",

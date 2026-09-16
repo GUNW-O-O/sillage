@@ -288,3 +288,45 @@ test("별칭에 제 색을 주면 띠가 축 색 대신 그것을 쓴다", async
     await prisma.noteAlias.update({ where: { id: alias.id }, data: { color: alias.color } });
   }
 });
+
+test("같은 향의 한영 표기를 합치면 칩이 하나가 되고 영문 노트도 그 색을 쓴다", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  const ko = `합치기한글 ${TAG}`;
+  const en = `Mergeeng ${TAG}`;
+  const [koRow, enRow] = await Promise.all(
+    [
+      { raw: ko, color: "#abcdef" },
+      { raw: en, color: null },
+    ].map((a) =>
+      prisma.noteAlias.create({
+        data: { ...a, normalizedRaw: normalizeName(a.raw), nodeId: "citrus", scope: "PUBLIC" },
+        select: { id: true },
+      }),
+    ),
+  );
+  const p = await seedProduct("한영합치기", [{ raw: en, nodeId: "citrus" }]);
+
+  await page.goto("/admin/flavors");
+  const node = page.getByTestId("node-citrus");
+  await node.getByRole("button", { name: en }).click();
+  // 영문을 한글 행에 흡수한다 — 모달의 합치기 목록에서 한글 표현을 고른다
+  await clickUntilDb(
+    page.getByRole("button", { name: ko, exact: true }).last(),
+    async () => !(await prisma.noteAlias.findUnique({ where: { id: enRow.id } })),
+  );
+  expect(
+    (await prisma.noteAlias.findUniqueOrThrow({ where: { id: koRow.id }, select: { rawEn: true } }))
+      .rawEn,
+  ).toBe(en);
+
+  // 칩이 하나로 줄고 두 표기를 함께 보인다
+  await page.goto("/admin/flavors");
+  await expect(node.getByRole("button", { name: `${ko} · ${en}` })).toBeVisible();
+  await expect(node.getByRole("button", { name: en, exact: true })).toHaveCount(0);
+
+  // **판매자 노트는 지운 영문 표기를 그대로 쓴다.** 띠가 합쳐진 행의 색을 쓰는지는 화면까지 와야 보인다
+  await page.goto(`/products/${p.id}`);
+  const band = page.getByTestId("note-gradient");
+  await expect(band).toBeVisible();
+  expect(await band.getAttribute("style")).toContain("#abcdef");
+});
