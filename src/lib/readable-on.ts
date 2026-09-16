@@ -22,14 +22,3 @@ export function readableOn(bg: string): string {
   const l = luminance(bg);
   return contrast(l, luminance(INK)) >= contrast(l, luminance(CANVAS)) ? INK : CANVAS;
 }
-
-/// 색을 캔버스에 섞어 옅은 톤을 만든다. **알파로 깔면 글자색을 정할 수가 없다** —
-/// 화면에 실제로 나타나는 색을 알아야 `readableOn` 이 답을 낸다. 그래서 미리 섞는다.
-export function mixOnCanvas(hex: string, alpha: number): string {
-  const mix = [1, 3, 5]
-    .map((i) => parseInt(hex.slice(i, i + 2), 16))
-    .map((v, k) => Math.round(v * alpha + parseInt(CANVAS.slice(1 + k * 2, 3 + k * 2), 16) * (1 - alpha)))
-    .map((v) => v.toString(16).padStart(2, "0"))
-    .join("");
-  return `#${mix}`;
-}

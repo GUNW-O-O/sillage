@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mixOnCanvas, readableOn } from "./readable-on";
+import { readableOn } from "./readable-on";
 
 // 색을 배경으로 깔면 글자가 읽히는지가 색마다 달라진다. 눈으로는 「좀 흐린데」 까지만
 // 보이고 어디서부터 안 읽히는지는 안 보인다 — 순수 함수라 여기서 지킨다.
@@ -57,19 +57,3 @@ function ratio(a: string, b: string): number {
   const [x, y] = [lum(a), lum(b)];
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
-
-describe("mixOnCanvas", () => {
-  it("알파 1 이면 그 색 그대로다", () => {
-    expect(mixOnCanvas("#b1503f", 1)).toBe("#b1503f");
-  });
-
-  it("알파 0 이면 캔버스다", () => {
-    expect(mixOnCanvas("#b1503f", 0)).toBe("#faf9f5");
-  });
-
-  it("섞으면 밝아져서 잉크가 읽힌다 — 약함 칩이 그래서 성립한다", () => {
-    // 짙은 로스팅 색은 원색에서는 캔버스 글자를 부르는데, 절반 섞으면 잉크로 뒤집힌다
-    expect(readableOn("#57473b")).toBe("#faf9f5");
-    expect(readableOn(mixOnCanvas("#57473b", 0.5))).toBe("#141413");
-  });
-});

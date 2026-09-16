@@ -154,7 +154,7 @@ test("색이 하나도 없으면 기록 시트도 띠를 안 그린다", async (
   await expect(page.getByTestId("note-gradient")).toHaveCount(0);
 });
 
-test("느낀 노트는 그 향의 색으로 칠하고 안 느낀 것은 무채색으로 둔다", async ({ page }) => {
+test("판정 칩은 판정 색을 지키고 향 색은 왼쪽 띠로만 보인다", async ({ page }) => {
   const p = await seedProduct(
     "판정색",
     [
@@ -171,23 +171,28 @@ test("느낀 노트는 그 향의 색으로 칠하고 안 느낀 것은 무채�
   // **시트의 판정 목록으로 범위를 좁힌다** — 시트 뒤에 기록 목록이 그대로 있어서
   // 노트 이름과 겹치는 원두가 하나라도 있으면 li 가 둘 잡힌다
   const chips = page.getByTestId("note-judgements");
+  const css = async (name: string) => {
+    const chip = chips.getByRole("listitem").filter({ hasText: name }).locator("div").first();
+    return {
+      bg: await chip.evaluate((el) => getComputedStyle(el).backgroundColor),
+      bar: await chip.getByTestId("note-bar").evaluate((el) => getComputedStyle(el).backgroundColor),
+    };
+  };
 
-  // 강함은 그 향의 원색이다 — 띠와 같은 색이라야 「이 향이 이 색」이 성립한다
-  const strong = chips.getByRole("listitem").filter({ hasText: "자스민" });
-  await expect(strong).toContainText("강함");
-  expect(await strong.locator("div").first().evaluate((el) => getComputedStyle(el).backgroundColor))
-    .toBe(asRgb(await colorOf("flower")));
+  await expect(chips.getByRole("listitem").filter({ hasText: "자스민" })).toContainText("강함");
+  const strong = await css("자스민");
+  // 강함의 배경은 향 색이 아니라 판정 색이다 — 향마다 강함의 색이 달라지면 강도가 안 읽힌다
+  expect(strong.bg).not.toBe(asRgb(await colorOf("flower")));
+  expect(strong.bg, "강함에 배경이 없다").not.toBe("rgba(0, 0, 0, 0)");
+  expect(strong.bar).toBe(asRgb(await colorOf("flower")));
 
-  // **안 건드린 노트는 무채색이다.** 못 느낀 것에 색을 주면 띠와 어긋난다
-  const miss = chips.getByRole("listitem").filter({ hasText: "블루베리" });
-  await expect(miss).toContainText("못 느낌");
-  // **「그 색이 아니다」로는 부족하다** — 색을 반쯤 섞어 칠해도 원색과는 다르니 통과한다.
-  // 못 느낌은 배경이 아예 없다(테두리만 있는 칩)는 것이 지켜야 할 주장이다
-  const bg = await miss
-    .locator("div")
-    .first()
-    .evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(bg, "못 느낌에 배경색이 칠해졌다").toBe("rgba(0, 0, 0, 0)");
+  // **판정이 달라도 띠는 같은 규칙이다.** 못 느낌도 원두에 적힌 노트라 제 색 띠를 갖는다.
+  // 못 느낌은 배경이 아예 없다(테두리만 있는 칩)는 것도 함께 지킨다
+  await expect(chips.getByRole("listitem").filter({ hasText: "블루베리" })).toContainText("못 느낌");
+  const miss = await css("블루베리");
+  expect(miss.bg, "못 느낌에 배경색이 칠해졌다").toBe("rgba(0, 0, 0, 0)");
+  // 베리는 제 색이 없어 과일에서 물려받는다
+  expect(miss.bar).toBe(asRgb((await colorOf("berry")) ?? (await colorOf("fruity"))));
 });
 
 test("판정을 순환해도 칩 크기가 안 변하고 콘솔이 조용하다", async ({ page }) => {
@@ -227,24 +232,31 @@ test("판정을 순환해도 칩 크기가 안 변하고 콘솔이 조용하다"
   expect(errors, "순환 중 콘솔 오류가 났다").toEqual([]);
 });
 
-test("원두 정보의 노트는 사람들이 느낀 만큼 짙어진다", async ({ page }) => {
+test("원두 정보의 노트는 칠하지 않고 느낌과 무관하게 제 색 띠를 단다", async ({ page }) => {
   const p = await seedProduct("느낀만큼", [
     { raw: "자스민", nodeId: "flower" },
     { raw: "블루베리", nodeId: "berry" },
+    { raw: "누룩", nodeId: null },
   ]);
-  // 한 사람이 자스민만 강하게 느꼈다 — 자스민은 원색, 블루베리는 안 칠해진다
+  // 한 사람이 자스민만 강하게 느꼈다
   await seedRecord(p.id, [{ sellerNoteId: p.sellerNotes[0].id, value: "STRONG" }]);
 
   await page.goto(`/products/${p.id}`);
 
-  const bg = (id: string) =>
-    page.getByTestId(`note-${id}`).evaluate((el) => getComputedStyle(el).backgroundColor);
+  const note = (i: number) => page.getByTestId(`note-${p.sellerNotes[i].id}`);
+  const bg = (i: number) => note(i).evaluate((el) => getComputedStyle(el).backgroundColor);
+  const bar = (i: number) =>
+    note(i).getByTestId("note-bar").evaluate((el) => getComputedStyle(el).backgroundColor);
 
-  // 기록 시트와 같은 눈금이다 — 모두가 강하게 느꼈으면 원색
-  expect(await bg(p.sellerNotes[0].id)).toBe(asRgb(await colorOf("flower")));
+  // **느낀 노트도 안 느낀 노트도 칸 배경이 같다.** 원색 위에 글자가 올라가면 대비가 깨진다
+  expect(await bg(0)).toBe(await bg(1));
 
-  // **아무도 안 느낀 노트는 안 칠한다.** 없는 것을 회색으로 채우지 않는 것과 같다
-  expect(await bg(p.sellerNotes[1].id)).not.toBe(asRgb(await colorOf("fruity")));
+  // 띠는 느낌과 무관하게 그 노트의 색이다
+  expect(await bar(0)).toBe(asRgb(await colorOf("flower")));
+  expect(await bar(1)).toBe(asRgb((await colorOf("berry")) ?? (await colorOf("fruity"))));
+
+  // **미분류 노트는 띠가 없다.** 없는 색을 회색으로 지어내지 않는다
+  await expect(note(2).getByTestId("note-bar")).toHaveCount(0);
 });
 
 test("기록이 있으면 원두 상세에서 라우트로 안 나가고 시트로 연다", async ({ page }) => {
